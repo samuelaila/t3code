@@ -68,10 +68,14 @@ export function makeDesktopContentSecurityPolicy(input: DesktopProtocolRegistrat
   const clerkOrigin = input.clerkFrontendApiHostname
     ? `https://${input.clerkFrontendApiHostname}`
     : undefined;
+  // Vite's dev transform pipeline needs classic `unsafe-eval` in the desktop
+  // renderer. Production keeps the tighter `wasm-unsafe-eval` only policy.
+  const isDevelopmentScheme = input.scheme === DESKTOP_DEVELOPMENT_SCHEME;
   const scriptSources = [
     "'self'",
     "'unsafe-inline'",
     "'wasm-unsafe-eval'",
+    ...(isDevelopmentScheme ? (["'unsafe-eval'"] as const) : []),
     ...(clerkOrigin ? [clerkOrigin] : []),
     "https://challenges.cloudflare.com",
   ];
