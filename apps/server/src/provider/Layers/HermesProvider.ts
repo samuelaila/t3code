@@ -35,7 +35,9 @@ import {
   makeHermesAcpRuntime,
   resolveHermesAcpBaseModelId,
   resolveHermesAuthMethodId,
+  resolveHermesHome,
 } from "../acp/HermesAcpSupport.ts";
+import { discoverSkillsFromRoots } from "../Drivers/AgentFsSkills.ts";
 
 const HERMES_PRESENTATION = {
   displayName: "Hermes",
@@ -157,9 +159,22 @@ const runHermesVersionCommand = (
     );
   });
 
+const discoverHermesSkills = Effect.fn("discoverHermesSkills")(function* (
+  hermesSettings: HermesSettings,
+  cwd?: string,
+) {
+  const path = yield* Path.Path;
+  const home = resolveHermesHome(hermesSettings.profile);
+  return yield* discoverSkillsFromRoots([
+    { directory: path.join(home, "skills"), scope: "user" },
+    ...(cwd ? [{ directory: path.join(cwd, ".hermes", "skills"), scope: "project" as const }] : []),
+  ]);
+});
+
 export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(function* (
   hermesSettings: HermesSettings,
   environment: NodeJS.ProcessEnv = process.env,
+  cwd?: string,
 ): Effect.fn.Return<
   ServerProviderDraft,
   never,
@@ -167,6 +182,7 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
 > {
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const fallbackModels = hermesModelsFromSettings(hermesSettings.customModels);
+  const skills = yield* discoverHermesSkills(hermesSettings, cwd);
 
   if (!hermesSettings.enabled) {
     return buildServerProvider({
@@ -319,6 +335,7 @@ export const checkHermesProviderStatus = Effect.fn("checkHermesProviderStatus")(
     enabled: hermesSettings.enabled,
     checkedAt,
     models,
+    skills,
     probe: {
       installed: true,
       version,
