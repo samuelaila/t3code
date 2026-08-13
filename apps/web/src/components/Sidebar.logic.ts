@@ -565,51 +565,106 @@ type ActiveThreadActivityInput = {
     readonly startedAt?: string | null;
     readonly completedAt?: string | null;
   } | null;
+  readonly hasPendingApprovals?: boolean;
+  readonly hasPendingUserInput?: boolean;
+  readonly session?: SidebarV2StatusInput["session"];
+  readonly backgroundLiveness?: SidebarThreadSummary["backgroundLiveness"];
+  readonly lastVisitedAt?: string | null;
+};
+
+/** Active-list bands: human blockers first, then unread Done, then the rest. */
+export type ActiveThreadSortTier = "attention" | "done" | "rest";
+
+const ACTIVE_THREAD_SORT_TIER_RANK: Record<ActiveThreadSortTier, number> = {
+  attention: 0,
+  done: 1,
+  rest: 2,
 };
 
 /**
- * Most recent work on an active thread: last user message or turn stamp,
- * then updatedAt, then createdAt. Used so a session that just finished
- * work jumps above older untouched rows (All projects and per-project).
+ * Where an active row belongs in the list.
+ * - attention: approval / input / failed (you must act)
+ * - done: green Done pill (turn finished since last visit)
+ * - rest: working, monitoring, ready — stable, not reshuffled by the timer
  */
-export function resolveActiveThreadActivityTimestamp(
+export function resolveActiveThreadSortTier(
   thread: ActiveThreadActivityInput,
-): string {
-  let latest: string | null = null;
+): ActiveThreadSortTier {
+  const status = resolveSidebarV2Status(thread);
+  if (status === "approval" || status === "input" || status === "failed") {
+    return "attention";
+  }
+  // hasUnseenCompletion only reads latestTurn + lastVisitedAt; fill the rest
+  // of ThreadStatusInput with inert defaults so the call stays type-safe.
+  if (
+    hasUnseenCompletion({
+      latestTurn: thread.latestTurn ?? null,
+      lastVisitedAt: thread.lastVisitedAt ?? undefined,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      interactionMode: "default",
+      hasActionableProposedPlan: false,
+      session: null,
+      backgroundLiveness: null,
+    })
+  ) {
+    return "done";
+  }
+  return "rest";
+}
+
+/**
+ * Recency for attention/done only. Deliberately ignores turn `startedAt` and
+ * `updatedAt` so a Working timer / heartbeat never reshuffles the list.
+ */
+export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivityInput): number {
   let latestMs = Number.NEGATIVE_INFINITY;
   for (const candidate of [
+    thread.latestTurn?.completedAt,
     thread.latestUserMessageAt,
     thread.latestTurn?.requestedAt,
-    thread.latestTurn?.startedAt,
-    thread.latestTurn?.completedAt,
-    thread.updatedAt,
     thread.createdAt,
   ]) {
     if (candidate == null) continue;
     const parsed = Date.parse(candidate);
     if (!Number.isNaN(parsed) && parsed > latestMs) {
-      latest = candidate;
       latestMs = parsed;
     }
   }
-  return latest ?? thread.createdAt;
+  return latestMs === Number.NEGATIVE_INFINITY ? parseTimestampMs(thread.createdAt) : latestMs;
 }
 
-// v2 sort: most recent activity on top (user message / turn / updatedAt /
-// createdAt). Applies for All projects and when a single project is filtered
-// — both pass through the same activeThreads partition.
+/**
+ * Active list order (All projects and any single-project filter share this):
+ * 1. Needs attention (approval / input / failed), newest signal first
+ * 2. Done (unread completion), newest finish first
+ * 3. Everything else in stable creation order (Working timers do not move rows)
+ *
+ * When the Done pill clears (user opens the thread), that row drops out of
+ * the Done band on the next render.
+ */
 export function sortThreadsForSidebar<
   T extends { readonly id: string } & ActiveThreadActivityInput,
 >(threads: readonly T[]): T[] {
-  const activityMs = (thread: T) => {
-    const timestamp = resolveActiveThreadActivityTimestamp(thread);
-    const parsed = Date.parse(timestamp);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-  return [...threads].toSorted(
-    (left, right) =>
-      activityMs(right) - activityMs(left) || left.id.localeCompare(right.id),
-  );
+  return [...threads].toSorted((left, right) => {
+    const leftTier = resolveActiveThreadSortTier(left);
+    const rightTier = resolveActiveThreadSortTier(right);
+    const tierDiff =
+      ACTIVE_THREAD_SORT_TIER_RANK[leftTier] - ACTIVE_THREAD_SORT_TIER_RANK[rightTier];
+    if (tierDiff !== 0) return tierDiff;
+
+    if (leftTier === "rest") {
+      return (
+        parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
+        left.id.localeCompare(right.id)
+      );
+    }
+
+    return (
+      resolveActiveThreadAttentionRecencyMs(right) - resolveActiveThreadAttentionRecencyMs(left) ||
+      left.id.localeCompare(right.id)
+    );
+  });
 }
 
 // Pinned-reorder key math and the keyed sort live in client-runtime
