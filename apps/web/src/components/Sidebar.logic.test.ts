@@ -778,17 +778,22 @@ describe("sortThreadsForSidebar", () => {
       input.sessionStatus == null
         ? null
         : {
+            threadId: ThreadId.make(input.id),
             status: input.sessionStatus,
+            providerName: "Codex",
+            providerInstanceId: ProviderInstanceId.make("codex"),
+            runtimeMode: DEFAULT_RUNTIME_MODE,
+            activeTurnId: null,
+            lastError: null,
             updatedAt: input.updatedAt ?? input.createdAt,
           },
     latestTurn:
       input.completedAt === undefined
         ? null
-        : {
-            requestedAt: input.completedAt,
-            startedAt: input.completedAt,
+        : makeLatestTurn({
             completedAt: input.completedAt,
-          },
+            startedAt: input.completedAt,
+          }),
   });
 
   it("puts attention before Done, and Done before working/ready", () => {

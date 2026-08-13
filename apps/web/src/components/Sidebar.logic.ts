@@ -535,11 +535,7 @@ type ActiveThreadActivityInput = {
   readonly createdAt: string;
   readonly updatedAt?: string | null;
   readonly latestUserMessageAt?: string | null;
-  readonly latestTurn?: {
-    readonly requestedAt?: string | null;
-    readonly startedAt?: string | null;
-    readonly completedAt?: string | null;
-  } | null;
+  readonly latestTurn?: SidebarThreadSummary["latestTurn"];
   readonly hasPendingApprovals?: boolean;
   readonly hasPendingUserInput?: boolean;
   readonly session?: SidebarThreadStatusInput["session"];
@@ -565,7 +561,14 @@ const ACTIVE_THREAD_SORT_TIER_RANK: Record<ActiveThreadSortTier, number> = {
 export function resolveActiveThreadSortTier(
   thread: ActiveThreadActivityInput,
 ): ActiveThreadSortTier {
-  const status = resolveSidebarThreadStatus(thread);
+  // ActiveThreadActivityInput keeps these optional (callers sort partial rows),
+  // but the canonical resolver requires them — default rather than widen it.
+  const status = resolveSidebarThreadStatus({
+    hasPendingApprovals: thread.hasPendingApprovals ?? false,
+    hasPendingUserInput: thread.hasPendingUserInput ?? false,
+    session: thread.session ?? null,
+    backgroundLiveness: thread.backgroundLiveness ?? null,
+  });
   if (status === "approval" || status === "input" || status === "failed") {
     return "attention";
   }
