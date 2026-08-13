@@ -167,21 +167,44 @@ type ActiveThreadActivityInput = {
     readonly startedAt?: string | null;
     readonly completedAt?: string | null;
   } | null;
+  readonly hasPendingApprovals?: boolean;
+  readonly hasPendingUserInput?: boolean;
+  readonly session?: EnvironmentThreadShell["session"];
+};
+
+type ActiveThreadSortTier = "attention" | "rest";
+
+const ACTIVE_THREAD_SORT_TIER_RANK: Record<ActiveThreadSortTier, number> = {
+  attention: 0,
+  rest: 1,
 };
 
 /**
- * Most recent work first (user message / turn / updatedAt / createdAt).
- * Mirrors web `sortThreadsForSidebarV2` so finished or newly touched
- * sessions rise to the top under All projects and single-project filters.
+ * Attention (approval / input / failed) first; everything else stays in a
+ * stable creation order so Working timers do not reshuffle the list.
+ * Mirrors web active-list bands (mobile has no local visit stamp for Done).
  */
-export function resolveActiveThreadActivityMs(thread: ActiveThreadActivityInput): number {
+export function resolveActiveThreadSortTier(
+  thread: ActiveThreadActivityInput,
+): ActiveThreadSortTier {
+  const status = resolveThreadListV2Status({
+    hasPendingApprovals: thread.hasPendingApprovals ?? false,
+    hasPendingUserInput: thread.hasPendingUserInput ?? false,
+    session: thread.session ?? null,
+  });
+  if (status === "approval" || status === "input" || status === "failed") {
+    return "attention";
+  }
+  return "rest";
+}
+
+/** Recency for attention rows only — ignores turn start / updatedAt churn. */
+export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivityInput): number {
   let latestMs = Number.NEGATIVE_INFINITY;
   for (const candidate of [
+    thread.latestTurn?.completedAt,
     thread.latestUserMessageAt,
     thread.latestTurn?.requestedAt,
-    thread.latestTurn?.startedAt,
-    thread.latestTurn?.completedAt,
-    thread.updatedAt,
     thread.createdAt,
   ]) {
     if (candidate == null) continue;
@@ -198,11 +221,25 @@ export function sortThreadsForListV2<T extends { readonly id: string } & ActiveT
 ): T[] {
   // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023
   // change-by-copy array methods.
-  return [...threads].sort(
-    (left, right) =>
-      resolveActiveThreadActivityMs(right) - resolveActiveThreadActivityMs(left) ||
-      left.id.localeCompare(right.id),
-  );
+  return [...threads].sort((left, right) => {
+    const leftTier = resolveActiveThreadSortTier(left);
+    const rightTier = resolveActiveThreadSortTier(right);
+    const tierDiff =
+      ACTIVE_THREAD_SORT_TIER_RANK[leftTier] - ACTIVE_THREAD_SORT_TIER_RANK[rightTier];
+    if (tierDiff !== 0) return tierDiff;
+
+    if (leftTier === "rest") {
+      return (
+        parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
+        left.id.localeCompare(right.id)
+      );
+    }
+
+    return (
+      resolveActiveThreadAttentionRecencyMs(right) - resolveActiveThreadAttentionRecencyMs(left) ||
+      left.id.localeCompare(right.id)
+    );
+  });
 }
 
 export interface ThreadListV2Item {

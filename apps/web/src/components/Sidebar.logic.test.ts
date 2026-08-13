@@ -721,55 +721,134 @@ describe("sortThreadsForSidebarV2", () => {
     createdAt: string;
     updatedAt?: string;
     latestUserMessageAt?: string;
+    lastVisitedAt?: string;
+    hasPendingApprovals?: boolean;
+    hasPendingUserInput?: boolean;
+    sessionStatus?: "running" | "starting" | "idle" | "error" | null;
+    completedAt?: string | null;
   }) => ({
     id: input.id,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt ?? input.createdAt,
     latestUserMessageAt: input.latestUserMessageAt ?? null,
-    latestTurn: null,
+    lastVisitedAt: input.lastVisitedAt ?? null,
+    hasPendingApprovals: input.hasPendingApprovals ?? false,
+    hasPendingUserInput: input.hasPendingUserInput ?? false,
+    session:
+      input.sessionStatus == null
+        ? null
+        : {
+            status: input.sessionStatus,
+            updatedAt: input.updatedAt ?? input.createdAt,
+          },
+    latestTurn:
+      input.completedAt === undefined
+        ? null
+        : {
+            requestedAt: input.completedAt,
+            startedAt: input.completedAt,
+            completedAt: input.completedAt,
+          },
   });
 
-  it("orders by latest activity, most recent first", () => {
+  it("puts attention before Done, and Done before working/ready", () => {
     const sorted = sortThreadsForSidebarV2([
       sortable({
-        id: "old-creation-fresh-work",
-        createdAt: "2026-03-09T08:00:00.000Z",
-        latestUserMessageAt: "2026-03-09T14:00:00.000Z",
-      }),
-      sortable({
-        id: "new-creation-stale",
+        id: "working-old",
         createdAt: "2026-03-09T12:00:00.000Z",
-        latestUserMessageAt: "2026-03-09T12:05:00.000Z",
+        sessionStatus: "running",
+        updatedAt: "2026-03-09T15:00:00.000Z",
       }),
       sortable({
-        id: "middle",
-        createdAt: "2026-03-09T10:00:00.000Z",
+        id: "done-recent",
+        createdAt: "2026-03-09T08:00:00.000Z",
+        lastVisitedAt: "2026-03-09T09:00:00.000Z",
+        completedAt: "2026-03-09T14:00:00.000Z",
+      }),
+      sortable({
+        id: "approval",
+        createdAt: "2026-03-09T07:00:00.000Z",
+        hasPendingApprovals: true,
         latestUserMessageAt: "2026-03-09T13:00:00.000Z",
       }),
     ]);
 
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      "old-creation-fresh-work",
-      "middle",
-      "new-creation-stale",
+    expect(sorted.map((thread) => thread.id)).toEqual(["approval", "done-recent", "working-old"]);
+  });
+
+  it("does not reshuffle working rows when turn/update timestamps advance", () => {
+    const base = [
+      sortable({
+        id: "older-created",
+        createdAt: "2026-03-09T08:00:00.000Z",
+        sessionStatus: "running",
+        updatedAt: "2026-03-09T16:00:00.000Z",
+      }),
+      sortable({
+        id: "newer-created",
+        createdAt: "2026-03-09T12:00:00.000Z",
+        sessionStatus: "running",
+        updatedAt: "2026-03-09T12:05:00.000Z",
+      }),
+    ];
+    const sortedOnce = sortThreadsForSidebarV2(base);
+    const sortedAgain = sortThreadsForSidebarV2(
+      base.map((thread) =>
+        thread.id === "older-created"
+          ? { ...thread, updatedAt: "2026-03-09T18:00:00.000Z" }
+          : thread,
+      ),
+    );
+
+    expect(sortedOnce.map((thread) => thread.id)).toEqual(["newer-created", "older-created"]);
+    expect(sortedAgain.map((thread) => thread.id)).toEqual(["newer-created", "older-created"]);
+  });
+
+  it("drops a row out of the Done band once lastVisited clears the pill", () => {
+    const finished = sortable({
+      id: "was-done",
+      createdAt: "2026-03-09T10:00:00.000Z",
+      lastVisitedAt: "2026-03-09T09:00:00.000Z",
+      completedAt: "2026-03-09T14:00:00.000Z",
+    });
+    const working = sortable({
+      id: "working-newer",
+      createdAt: "2026-03-09T12:00:00.000Z",
+      sessionStatus: "running",
+    });
+
+    expect(sortThreadsForSidebarV2([working, finished]).map((t) => t.id)).toEqual([
+      "was-done",
+      "working-newer",
+    ]);
+
+    const visited = {
+      ...finished,
+      lastVisitedAt: "2026-03-09T15:00:00.000Z",
+    };
+    expect(sortThreadsForSidebarV2([working, visited]).map((t) => t.id)).toEqual([
+      "working-newer",
+      "was-done",
     ]);
   });
 
-  it("breaks activity-time ties by id so the order is stable", () => {
+  it("orders Done rows by most recent completion", () => {
     const sorted = sortThreadsForSidebarV2([
       sortable({
-        id: "b",
-        createdAt: "2026-03-09T10:00:00.000Z",
-        latestUserMessageAt: "2026-03-09T11:00:00.000Z",
+        id: "older-done",
+        createdAt: "2026-03-09T12:00:00.000Z",
+        lastVisitedAt: "2026-03-09T08:00:00.000Z",
+        completedAt: "2026-03-09T10:00:00.000Z",
       }),
       sortable({
-        id: "a",
-        createdAt: "2026-03-09T09:00:00.000Z",
-        latestUserMessageAt: "2026-03-09T11:00:00.000Z",
+        id: "newer-done",
+        createdAt: "2026-03-09T07:00:00.000Z",
+        lastVisitedAt: "2026-03-09T08:00:00.000Z",
+        completedAt: "2026-03-09T14:00:00.000Z",
       }),
     ]);
 
-    expect(sorted.map((thread) => thread.id)).toEqual(["a", "b"]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["newer-done", "older-done"]);
   });
 });
 

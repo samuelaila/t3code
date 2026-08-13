@@ -1759,6 +1759,8 @@ export default function SidebarV2() {
   // merging, no optimistic holds. Archived threads remain hidden here —
   // archive keeps its original "remove from sidebar" meaning.
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  // Visit stamps feed the Done band in active-list sort (unread completion).
+  const threadLastVisitedAtById = useUiStateStore((state) => state.threadLastVisitedAtById);
   const {
     pinnedThreads,
     reorderablePinnedKeys,
@@ -1834,7 +1836,15 @@ export default function SidebarV2() {
           )
           .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
       ),
-      activeThreads: sortThreadsForSidebarV2(active),
+      activeThreads: sortThreadsForSidebarV2(
+        active.map((thread) => ({
+          ...thread,
+          lastVisitedAt:
+            threadLastVisitedAtById[
+              scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
+            ] ?? null,
+        })),
+      ),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -1851,6 +1861,7 @@ export default function SidebarV2() {
     scopedProjectKeys,
     serverConfigs,
     snoozeWakeTick,
+    threadLastVisitedAtById,
     threads,
   ]);
 
