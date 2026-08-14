@@ -696,3 +696,24 @@ export const PiAgentIcon: Icon = ({ className, ...props }) => (
     <path fill="#fff" d="M517.36 400H634.72V634.72H517.36Z" />
   </svg>
 );
+
+/** Moonshot Kimi — four-point burst in their purple. */
+export const KimiIcon: Icon = ({ className, ...props }) => (
+  <svg {...props} viewBox="0 0 24 24" fill="none" className={cn("fill-[#7C3AED]", className)}>
+    <path d="M12 1.2 14.3 9.7 22.8 12 14.3 14.3 12 22.8 9.7 14.3 1.2 12 9.7 9.7 12 1.2Z" />
+  </svg>
+);
+
+/** Hermes ACP — winged staff mark, distinct from Claude/Grok bursts. */
+export const HermesIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={cn("fill-[#CA8A04] dark:fill-[#FACC15]", className)}
+  >
+    <path d="M11.2 2h1.6v20h-1.6V2Z" />
+    <path d="M12 5.2c2.4 1.6 5.8 1.8 8.2.4-.2 2.6-2.2 4.7-4.8 5.3 2.6.6 4.6 2.7 4.8 5.3-2.4-1.4-5.8-1.2-8.2.4V5.2Z" />
+    <path d="M12 5.2C9.6 6.8 6.2 7 3.8 5.6c.2 2.6 2.2 4.7 4.8 5.3-2.6.6-4.6 2.7-4.8 5.3 2.4-1.4 5.8-1.2 8.2.4V5.2Z" />
+  </svg>
+);

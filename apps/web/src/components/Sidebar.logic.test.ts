@@ -195,13 +195,19 @@ describe("buildBulkTitleRegenerationContextMenuItem", () => {
 describe("buildMultiSelectThreadContextMenuItems", () => {
   it("offers bulk archive with the selected count", () => {
     expect(
-      buildMultiSelectThreadContextMenuItems({ count: 3, hasRunningThread: false }),
+      buildMultiSelectThreadContextMenuItems({
+        count: 3,
+        hasRunningThread: false,
+      }),
     ).toContainEqual({ id: "archive", label: "Archive (3)", disabled: false });
   });
 
   it("disables bulk archive when a selected thread is running", () => {
     expect(
-      buildMultiSelectThreadContextMenuItems({ count: 2, hasRunningThread: true }),
+      buildMultiSelectThreadContextMenuItems({
+        count: 2,
+        hasRunningThread: true,
+      }),
     ).toContainEqual({ id: "archive", label: "Archive (2)", disabled: true });
   });
 });
@@ -422,13 +428,19 @@ describe("isSidebarNestedLinkClick", () => {
   });
 
   it("walks up from a text node to the enclosing link", () => {
-    expect(isSidebarNestedLinkClick({ parentElement: linkTarget } as unknown as EventTarget)).toBe(
-      true,
-    );
+    expect(
+      isSidebarNestedLinkClick({
+        parentElement: linkTarget,
+      } as unknown as EventTarget),
+    ).toBe(true);
   });
 
   it("leaves ordinary row clicks alone", () => {
-    expect(isSidebarNestedLinkClick({ closest: () => null } as unknown as EventTarget)).toBe(false);
+    expect(
+      isSidebarNestedLinkClick({
+        closest: () => null,
+      } as unknown as EventTarget),
+    ).toBe(false);
     expect(isSidebarNestedLinkClick(null)).toBe(false);
   });
 });
@@ -680,15 +692,23 @@ describe("resolveSidebarThreadStatus", () => {
   const idle = { hasPendingApprovals: false, hasPendingUserInput: false };
 
   it("prioritizes approval over a running session", () => {
-    expect(resolveSidebarThreadStatus({ ...idle, hasPendingApprovals: true, session })).toBe(
-      "approval",
-    );
+    expect(
+      resolveSidebarThreadStatus({
+        ...idle,
+        hasPendingApprovals: true,
+        session,
+      }),
+    ).toBe("approval");
   });
 
   it("prioritizes awaiting input over a running session, below approval", () => {
-    expect(resolveSidebarThreadStatus({ ...idle, hasPendingUserInput: true, session })).toBe(
-      "input",
-    );
+    expect(
+      resolveSidebarThreadStatus({
+        ...idle,
+        hasPendingUserInput: true,
+        session,
+      }),
+    ).toBe("input");
     expect(
       resolveSidebarThreadStatus({
         ...idle,
@@ -719,13 +739,21 @@ describe("resolveSidebarThreadStatus", () => {
     expect(
       resolveSidebarThreadStatus({
         ...idle,
-        session: { ...session, status: "stopped" as const, lastError: "persisted" },
+        session: {
+          ...session,
+          status: "stopped" as const,
+          lastError: "persisted",
+        },
       }),
     ).toBe("ready");
     expect(
       resolveSidebarThreadStatus({
         ...idle,
-        session: { ...session, status: "ready" as const, lastError: "persisted" },
+        session: {
+          ...session,
+          status: "ready" as const,
+          lastError: "persisted",
+        },
       }),
     ).toBe("ready");
   });
@@ -872,6 +900,28 @@ describe("sortThreadsForSidebar", () => {
     ]);
   });
 
+  it("keeps working above idle rows, and orders idle rows by latest conversation", () => {
+    const sorted = sortThreadsForSidebar([
+      sortable({
+        id: "idle-stale",
+        createdAt: "2026-03-09T12:00:00.000Z",
+        latestUserMessageAt: "2026-03-09T12:30:00.000Z",
+      }),
+      sortable({
+        id: "idle-fresh",
+        createdAt: "2026-03-09T07:00:00.000Z",
+        latestUserMessageAt: "2026-03-09T16:00:00.000Z",
+      }),
+      sortable({
+        id: "working",
+        createdAt: "2026-03-09T06:00:00.000Z",
+        sessionStatus: "running",
+      }),
+    ]);
+
+    expect(sorted.map((thread) => thread.id)).toEqual(["working", "idle-fresh", "idle-stale"]);
+  });
+
   it("orders Done rows by most recent completion", () => {
     const sorted = sortThreadsForSidebar([
       sortable({
@@ -999,9 +1049,17 @@ describe("sortPinnedThreadsForSidebar", () => {
   it("sorts keyed threads by key ahead of keyless threads in creation order", () => {
     const sorted = sortPinnedThreadsForSidebar([
       pinnable({ id: "keyless-old", createdAt: "2026-03-09T08:00:00.000Z" }),
-      pinnable({ id: "second", createdAt: "2026-03-09T09:00:00.000Z", pinOrderKey: "t" }),
+      pinnable({
+        id: "second",
+        createdAt: "2026-03-09T09:00:00.000Z",
+        pinOrderKey: "t",
+      }),
       pinnable({ id: "keyless-new", createdAt: "2026-03-09T12:00:00.000Z" }),
-      pinnable({ id: "first", createdAt: "2026-03-09T07:00:00.000Z", pinOrderKey: "g" }),
+      pinnable({
+        id: "first",
+        createdAt: "2026-03-09T07:00:00.000Z",
+        pinOrderKey: "g",
+      }),
     ]);
 
     expect(sorted.map((thread) => thread.id)).toEqual([
@@ -1014,8 +1072,16 @@ describe("sortPinnedThreadsForSidebar", () => {
 
   it("breaks equal keys by id so raced writes render identically everywhere", () => {
     const sorted = sortPinnedThreadsForSidebar([
-      pinnable({ id: "b", createdAt: "2026-03-09T10:00:00.000Z", pinOrderKey: "m" }),
-      pinnable({ id: "a", createdAt: "2026-03-09T11:00:00.000Z", pinOrderKey: "m" }),
+      pinnable({
+        id: "b",
+        createdAt: "2026-03-09T10:00:00.000Z",
+        pinOrderKey: "m",
+      }),
+      pinnable({
+        id: "a",
+        createdAt: "2026-03-09T11:00:00.000Z",
+        pinOrderKey: "m",
+      }),
     ]);
 
     expect(sorted.map((thread) => thread.id)).toEqual(["a", "b"]);
@@ -1057,9 +1123,15 @@ describe("sortSettledThreadsForSidebar", () => {
 
   it("falls back to last activity for auto-settled threads without a settledAt stamp", () => {
     const sorted = sortSettledThreadsForSidebar([
-      settled({ id: "auto-old", latestUserMessageAt: "2026-03-09T08:00:00.000Z" }),
+      settled({
+        id: "auto-old",
+        latestUserMessageAt: "2026-03-09T08:00:00.000Z",
+      }),
       settled({ id: "explicit", settledAt: "2026-03-09T10:00:00.000Z" }),
-      settled({ id: "auto-recent", latestUserMessageAt: "2026-03-09T11:00:00.000Z" }),
+      settled({
+        id: "auto-recent",
+        latestUserMessageAt: "2026-03-09T11:00:00.000Z",
+      }),
     ]);
 
     expect(sorted.map((thread) => thread.id)).toEqual(["auto-recent", "explicit", "auto-old"]);
@@ -1069,7 +1141,10 @@ describe("sortSettledThreadsForSidebar", () => {
     // The message came in before the other thread's, but its turn finished
     // after: completion time is the real "work ended" moment.
     const sorted = sortSettledThreadsForSidebar([
-      settled({ id: "message-only", latestUserMessageAt: "2026-03-09T10:04:00.000Z" }),
+      settled({
+        id: "message-only",
+        latestUserMessageAt: "2026-03-09T10:04:00.000Z",
+      }),
       settled({
         id: "completed-later",
         latestUserMessageAt: "2026-03-09T10:00:00.000Z",
@@ -1132,7 +1207,10 @@ describe("resolveWorkingStartedAt", () => {
   it("skips a malformed startedAt instead of returning it", () => {
     expect(
       resolveWorkingStartedAt({
-        latestTurn: makeLatestTurn({ startedAt: "not-a-date", completedAt: null }),
+        latestTurn: makeLatestTurn({
+          startedAt: "not-a-date",
+          completedAt: null,
+        }),
         session,
       }),
     ).toBe("2026-03-09T10:00:00.000Z");
@@ -1262,21 +1340,30 @@ describe("resolveThreadStatusPill", () => {
 
 describe("resolveThreadRowClassName", () => {
   it("uses the active sidebar surface when a thread is both selected and active", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: true });
+    const className = resolveThreadRowClassName({
+      isActive: true,
+      isSelected: true,
+    });
     expect(className).toContain("bg-sidebar-row-active");
     expect(className).toContain("text-sidebar-foreground");
     expect(className).not.toContain("bg-primary");
   });
 
   it("uses selected hover colors for selected threads", () => {
-    const className = resolveThreadRowClassName({ isActive: false, isSelected: true });
+    const className = resolveThreadRowClassName({
+      isActive: false,
+      isSelected: true,
+    });
     expect(className).toContain("bg-sidebar-row-selected");
     expect(className).toContain("hover:bg-sidebar-row-active");
     expect(className).not.toContain("bg-primary");
   });
 
   it("uses the active sidebar surface for active-only threads", () => {
-    const className = resolveThreadRowClassName({ isActive: true, isSelected: false });
+    const className = resolveThreadRowClassName({
+      isActive: true,
+      isSelected: false,
+    });
     expect(className).toContain("bg-sidebar-row-active");
     expect(className).toContain("hover:bg-sidebar-row-active");
   });

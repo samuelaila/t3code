@@ -1,11 +1,15 @@
 import { type CSSProperties, memo } from "react";
 import { type ProviderDriverKind } from "@t3tools/contracts";
 
-import { PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
+import { providerInstanceBrandIcon } from "./providerIconUtils";
 import { cn } from "~/lib/utils";
 
 export function providerInstanceInitials(label: string): string {
-  const words = label.replace(/[_-]+/g, " ").split(/\s+/u).filter(Boolean);
+  const words = label
+    .replace(/\([^)]*\)/gu, " ")
+    .replace(/[_./-]+/gu, " ")
+    .split(/\s+/u)
+    .filter((word) => /[A-Za-z]/u.test(word));
   if (words.length === 0) return "";
   if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
   return words
@@ -17,6 +21,7 @@ export function providerInstanceInitials(label: string): string {
 export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   driverKind: ProviderDriverKind;
   displayName: string;
+  extraHints?: ReadonlyArray<string | null | undefined>;
   accentColor?: string | undefined;
   showBadge?: boolean;
   badgeContent?: "initials" | "none";
@@ -26,7 +31,7 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   statusDotClassName?: string;
   indicatorBackground?: string;
 }) {
-  const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
+  const Icon = providerInstanceBrandIcon(props.displayName, props.driverKind, props.extraHints);
   const indicatorBackground = props.indicatorBackground ?? "var(--card)";
   const accentStyle = props.accentColor
     ? ({ "--provider-accent": props.accentColor } as CSSProperties)

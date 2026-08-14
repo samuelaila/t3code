@@ -15,6 +15,7 @@ import {
   ModelEsque,
   getTriggerDisplayModelLabel,
   getTriggerDisplayModelName,
+  providerInstanceBrandIcon,
 } from "./providerIconUtils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { ComposerControl, ComposerControlChevron } from "./ComposerControl";
@@ -67,10 +68,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     selectedInstanceOptions[0];
   const triggerTitle = selectedModel ? getTriggerDisplayModelName(selectedModel) : props.model;
   const triggerLabel = selectedModel ? getTriggerDisplayModelLabel(selectedModel) : props.model;
-  const duplicateDriverCount = props.instanceEntries.filter(
-    (entry) => activeEntry !== null && entry.driverKind === activeEntry.driverKind,
+  const activeBrandIcon = activeEntry
+    ? providerInstanceBrandIcon(activeEntry.displayName, activeEntry.driverKind)
+    : null;
+  const sameBrandCount = props.instanceEntries.filter(
+    (entry) =>
+      activeBrandIcon !== null &&
+      providerInstanceBrandIcon(entry.displayName, entry.driverKind) === activeBrandIcon,
   ).length;
-  const showInstanceBadge = Boolean(activeEntry?.accentColor) || duplicateDriverCount > 1;
+  const showInstanceBadge = activeBrandIcon !== null && sameBrandCount > 1;
 
   const setIsMenuOpen = (open: boolean) => {
     props.onOpenChange?.(open);
@@ -164,6 +170,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <ProviderInstanceIcon
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
+              extraHints={[selectedModel?.slug, selectedModel?.name]}
               accentColor={activeEntry.accentColor}
               showBadge={showInstanceBadge}
               className="size-4"

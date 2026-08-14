@@ -1,6 +1,7 @@
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { SparklesIcon, StarIcon } from "lucide-react";
+import { providerInstanceBrandIcon } from "./providerIconUtils";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -65,10 +66,12 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   const [hoveredInstanceId, setHoveredInstanceId] = useState<ProviderInstanceId | null>(null);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
   const [selectedIndicatorTop, setSelectedIndicatorTop] = useState<number | null>(null);
-  const duplicateDriverCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+  const duplicateBrandCounts = useMemo(() => {
+    const counts = new Map<unknown, number>();
     for (const entry of props.instanceEntries) {
-      counts.set(entry.driverKind, (counts.get(entry.driverKind) ?? 0) + 1);
+      const icon = providerInstanceBrandIcon(entry.displayName, entry.driverKind);
+      const key = icon ?? `none:${entry.instanceId}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
   }, [props.instanceEntries]);
@@ -143,8 +146,9 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             const isSelected = props.selectedInstanceId === entry.instanceId;
             const isHovered = hoveredInstanceId === entry.instanceId;
             const showNewBadge = props.newBadgeInstanceIds?.has(entry.instanceId) ?? false;
+            const brandIcon = providerInstanceBrandIcon(entry.displayName, entry.driverKind);
             const showInstanceBadge =
-              Boolean(entry.accentColor) || (duplicateDriverCounts.get(entry.driverKind) ?? 0) > 1;
+              brandIcon !== null && (duplicateBrandCounts.get(brandIcon) ?? 0) > 1;
 
             const tooltip = isUnavailable
               ? describeUnavailableInstance(entry)

@@ -4,8 +4,8 @@ import { StarIcon } from "lucide-react";
 import {
   getDisplayModelName,
   getTriggerDisplayModelLabel,
+  modelBrandIcon,
   type ModelEsque,
-  PROVIDER_ICON_BY_PROVIDER,
 } from "./providerIconUtils";
 import { ComboboxItem } from "../ui/combobox";
 import { Button } from "../ui/button";
@@ -38,7 +38,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   disabledReason?: string | null;
   onToggleFavorite: () => void;
 }) {
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
+  const ProviderIcon = modelBrandIcon(props.model, props.providerDisplayName, props.driverKind);
   const providerLabel = props.model.subProvider
     ? `${props.providerDisplayName} · ${props.model.subProvider}`
     : props.providerDisplayName;

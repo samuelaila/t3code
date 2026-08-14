@@ -43,9 +43,41 @@ import { resolveClaudeSdkExecutablePath } from "../Drivers/ClaudeExecutable.ts";
 import { makeClaudeEnvironment } from "../Drivers/ClaudeHome.ts";
 import { discoverClaudeSkills } from "../Drivers/ClaudeSkills.ts";
 
-const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities = createModelCapabilities({
-  optionDescriptors: [],
-});
+// Custom models on this driver (a proxied Grok, Kimi, Gemini, …) still run
+// through the Claude CLI, which takes the same reasoning scale — so offer it.
+// Claude-only extras (context window, fast mode, ultracode, ultrathink) stay
+// off, since they mean nothing to another vendor's model.
+const CLAUDE_EFFORT_OPTIONS: ReadonlyArray<{
+  value: string;
+  label: string;
+  isDefault?: boolean;
+}> = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High", isDefault: true },
+  { value: "xhigh", label: "Extra High" },
+  { value: "max", label: "Max" },
+];
+
+const buildEffortCapabilities = (
+  options: ReadonlyArray<{ value: string; label: string; isDefault?: boolean }>,
+): ModelCapabilities =>
+  createModelCapabilities({
+    optionDescriptors: [buildSelectOptionDescriptor({ id: "effort", label: "Reasoning", options })],
+  });
+
+export const DEFAULT_CLAUDE_MODEL_CAPABILITIES: ModelCapabilities =
+  buildEffortCapabilities(CLAUDE_EFFORT_OPTIONS);
+
+// Grok stops one notch below Max: a request sent at "max" comes back down to
+// "xhigh" before it reaches xAI, so offering Max would be a setting that does
+// nothing.
+const GROK_MODEL_CAPABILITIES: ModelCapabilities = buildEffortCapabilities(
+  CLAUDE_EFFORT_OPTIONS.filter((option) => option.value !== "max"),
+);
+
+export const claudeCustomModelCapabilities = (slug: string): ModelCapabilities =>
+  slug.startsWith("grok-") ? GROK_MODEL_CAPABILITIES : DEFAULT_CLAUDE_MODEL_CAPABILITIES;
 
 const CLAUDE_PRESENTATION = {
   displayName: "Claude",
@@ -805,7 +837,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   const allModels = providerModelsFromSettings(
     BUILT_IN_MODELS,
     claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+    claudeCustomModelCapabilities,
   );
 
   if (!claudeSettings.enabled) {
@@ -895,7 +927,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   const models = providerModelsFromSettings(
     getBuiltInClaudeModelsForVersion(parsedVersion),
     claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+    claudeCustomModelCapabilities,
   );
   const versionUpgradeMessage = supportsClaudeOpus5(parsedVersion)
     ? undefined
@@ -968,7 +1000,7 @@ export const makePendingClaudeProvider = (
     const models = providerModelsFromSettings(
       BUILT_IN_MODELS,
       claudeSettings.customModels,
-      DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+      claudeCustomModelCapabilities,
     );
 
     if (!claudeSettings.enabled) {

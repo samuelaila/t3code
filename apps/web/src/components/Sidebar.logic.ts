@@ -1,9 +1,6 @@
 import * as React from "react";
 import type { ContextMenuItem } from "@t3tools/contracts";
-import type {
-  SidebarProjectSortOrder,
-  SidebarThreadSortOrder,
-} from "@t3tools/contracts/settings";
+import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
   sortThreads,
@@ -16,8 +13,7 @@ import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
 
-export const THREAD_SELECTION_SAFE_SELECTOR =
-  "[data-thread-item], [data-thread-selection-safe]";
+export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
 export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
 // Visible sidebar rows are prewarmed into the thread-detail cache so opening a
 // nearby thread usually reuses an already-hot subscription. Each prewarmed
@@ -224,9 +220,7 @@ export function useThreadJumpHintVisibility(): {
   updateThreadJumpHintsVisibility: (shouldShow: boolean) => void;
 } {
   const [showThreadJumpHints, setShowThreadJumpHints] = React.useState(false);
-  const controllerRef = React.useRef<ThreadJumpHintVisibilityController | null>(
-    null,
-  );
+  const controllerRef = React.useRef<ThreadJumpHintVisibilityController | null>(null);
 
   React.useEffect(() => {
     const controller = createThreadJumpHintVisibilityController({
@@ -245,12 +239,9 @@ export function useThreadJumpHintVisibility(): {
     };
   }, []);
 
-  const updateThreadJumpHintsVisibility = React.useCallback(
-    (shouldShow: boolean) => {
-      controllerRef.current?.sync(shouldShow);
-    },
-    [],
-  );
+  const updateThreadJumpHintsVisibility = React.useCallback((shouldShow: boolean) => {
+    controllerRef.current?.sync(shouldShow);
+  }, []);
 
   return {
     showThreadJumpHints,
@@ -269,9 +260,7 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   return completedAt > lastVisitedAt;
 }
 
-export function shouldClearThreadSelectionOnMouseDown(
-  target: HTMLElement | null,
-): boolean {
+export function shouldClearThreadSelectionOnMouseDown(target: HTMLElement | null): boolean {
   if (target === null) return true;
   return !target.closest(THREAD_SELECTION_SAFE_SELECTOR);
 }
@@ -286,12 +275,7 @@ export function isTrailingDoubleClick(detail: number): boolean {
 }
 
 function nodeClosest(node: object | null, selector: string): unknown {
-  if (
-    node === null ||
-    !("closest" in node) ||
-    typeof node.closest !== "function"
-  )
-    return null;
+  if (node === null || !("closest" in node) || typeof node.closest !== "function") return null;
   return node.closest(selector);
 }
 
@@ -365,9 +349,7 @@ export function getVisibleSidebarThreadIds<TThreadId>(
   }[],
 ): TThreadId[] {
   return renderedProjects.flatMap((renderedProject) =>
-    renderedProject.shouldShowThreadPanel === false
-      ? []
-      : renderedProject.renderedThreadIds,
+    renderedProject.shouldShowThreadPanel === false ? [] : renderedProject.renderedThreadIds,
   );
 }
 
@@ -390,9 +372,7 @@ export function resolveAdjacentThreadId<T>(input: {
   }
 
   if (currentThreadId === null) {
-    return direction === "previous"
-      ? (threadIds.at(-1) ?? null)
-      : (threadIds[0] ?? null);
+    return direction === "previous" ? (threadIds.at(-1) ?? null) : (threadIds[0] ?? null);
   }
 
   const currentIndex = threadIds.indexOf(currentThreadId);
@@ -404,9 +384,7 @@ export function resolveAdjacentThreadId<T>(input: {
     return currentIndex > 0 ? (threadIds[currentIndex - 1] ?? null) : null;
   }
 
-  return currentIndex < threadIds.length - 1
-    ? (threadIds[currentIndex + 1] ?? null)
-    : null;
+  return currentIndex < threadIds.length - 1 ? (threadIds[currentIndex + 1] ?? null) : null;
 }
 
 export function shouldNavigateAfterProjectRemoval(input: {
@@ -482,29 +460,26 @@ export function resolveThreadRowClassName(input: {
 // Unread completion is tracked separately: it describes whether a ready
 // thread needs attention, not what the thread is currently doing.
 export type SidebarThreadStatus =
-  "approval" | "input" | "working" | "monitoring" | "failed" | "ready";
+  | "approval"
+  | "input"
+  | "working"
+  | "monitoring"
+  | "failed"
+  | "ready";
 
 type SidebarThreadStatusInput = Pick<
   SidebarThreadSummary,
-  | "hasPendingApprovals"
-  | "hasPendingUserInput"
-  | "session"
-  | "backgroundLiveness"
+  "hasPendingApprovals" | "hasPendingUserInput" | "session" | "backgroundLiveness"
 >;
 
-export function resolveSidebarThreadStatus(
-  thread: SidebarThreadStatusInput,
-): SidebarThreadStatus {
+export function resolveSidebarThreadStatus(thread: SidebarThreadStatusInput): SidebarThreadStatus {
   if (thread.hasPendingApprovals) {
     return "approval";
   }
   if (thread.hasPendingUserInput) {
     return "input";
   }
-  if (
-    thread.session?.status === "running" ||
-    thread.session?.status === "starting"
-  ) {
+  if (thread.session?.status === "running" || thread.session?.status === "starting") {
     return "working";
   }
   // A failed session outranks lingering background liveness: the user must
@@ -567,55 +542,68 @@ type ActiveThreadActivityInput = {
   } | null;
   readonly hasPendingApprovals?: boolean;
   readonly hasPendingUserInput?: boolean;
-  readonly session?: SidebarV2StatusInput["session"];
+  // Sorting only needs the live status, not a hydrated session record.
+  readonly session?: {
+    readonly status?: NonNullable<SidebarThreadSummary["session"]>["status"];
+  } | null;
   readonly backgroundLiveness?: SidebarThreadSummary["backgroundLiveness"];
   readonly lastVisitedAt?: string | null;
 };
 
-/** Active-list bands: human blockers first, then unread Done, then the rest. */
-export type ActiveThreadSortTier = "attention" | "done" | "rest";
+/**
+ * Active-list bands: human blockers first, then unread Done, then live work,
+ * then everything else.
+ */
+export type ActiveThreadSortTier = "attention" | "done" | "working" | "rest";
 
 const ACTIVE_THREAD_SORT_TIER_RANK: Record<ActiveThreadSortTier, number> = {
   attention: 0,
   done: 1,
-  rest: 2,
+  working: 2,
+  rest: 3,
 };
 
 /**
  * Where an active row belongs in the list.
  * - attention: approval / input / failed (you must act)
  * - done: green Done pill (turn finished since last visit)
- * - rest: working, monitoring, ready — stable, not reshuffled by the timer
+ * - working: an agent is running right now
+ * - rest: monitoring, ready — ordered by the most recent conversation
  */
 export function resolveActiveThreadSortTier(
   thread: ActiveThreadActivityInput,
+  lastVisitedAt?: string | null,
 ): ActiveThreadSortTier {
-  const status = resolveSidebarV2Status(thread);
+  // Both helpers only read the fields this lighter sort input already carries
+  // (approval/input flags, session.status, liveness, turn completion), so the
+  // casts stay sound while sorting avoids hydrating whole thread summaries.
+  const status = resolveSidebarThreadStatus({
+    hasPendingApprovals: thread.hasPendingApprovals ?? false,
+    hasPendingUserInput: thread.hasPendingUserInput ?? false,
+    session: (thread.session ?? null) as SidebarThreadStatusInput["session"],
+    backgroundLiveness: thread.backgroundLiveness ?? null,
+  });
   if (status === "approval" || status === "input" || status === "failed") {
     return "attention";
   }
-  // hasUnseenCompletion only reads latestTurn + lastVisitedAt; fill the rest
-  // of ThreadStatusInput with inert defaults so the call stays type-safe.
   if (
     hasUnseenCompletion({
       latestTurn: thread.latestTurn ?? null,
-      lastVisitedAt: thread.lastVisitedAt ?? undefined,
-      hasPendingApprovals: false,
-      hasPendingUserInput: false,
-      interactionMode: "default",
-      hasActionableProposedPlan: false,
-      session: null,
-      backgroundLiveness: null,
-    })
+      lastVisitedAt: lastVisitedAt ?? thread.lastVisitedAt ?? undefined,
+    } as ThreadStatusInput)
   ) {
     return "done";
+  }
+  if (status === "working") {
+    return "working";
   }
   return "rest";
 }
 
 /**
- * Recency for attention/done only. Deliberately ignores turn `startedAt` and
- * `updatedAt` so a Working timer / heartbeat never reshuffles the list.
+ * How recently the conversation itself moved. Deliberately ignores turn
+ * `startedAt` and `updatedAt` so a Working timer / heartbeat never reshuffles
+ * the list — only real conversation events do.
  */
 export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivityInput): number {
   let latestMs = Number.NEGATIVE_INFINITY;
@@ -636,29 +624,31 @@ export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivi
 
 /**
  * Active list order (All projects and any single-project filter share this):
- * 1. Needs attention (approval / input / failed), newest signal first
- * 2. Done (unread completion), newest finish first
- * 3. Everything else in stable creation order (Working timers do not move rows)
+ * 1. Needs attention (approval / input / failed)
+ * 2. Done (unread completion)
+ * 3. Working right now
+ * 4. Everything else
+ *
+ * Every band is ordered by the most recent conversation event, so the newest
+ * thing you were doing sits at the top of its band. Working timers and
+ * heartbeats are excluded from that stamp, so rows never shuffle on a tick.
  *
  * When the Done pill clears (user opens the thread), that row drops out of
  * the Done band on the next render.
  */
 export function sortThreadsForSidebar<
   T extends { readonly id: string } & ActiveThreadActivityInput,
->(threads: readonly T[]): T[] {
+>(
+  threads: readonly T[],
+  // Last-visited lives in local UI state, not on the thread, so the caller
+  // supplies it — without it nothing can land in the unread Done band.
+  lastVisitedAtFor?: (thread: T) => string | null | undefined,
+): T[] {
   return [...threads].toSorted((left, right) => {
-    const leftTier = resolveActiveThreadSortTier(left);
-    const rightTier = resolveActiveThreadSortTier(right);
     const tierDiff =
-      ACTIVE_THREAD_SORT_TIER_RANK[leftTier] - ACTIVE_THREAD_SORT_TIER_RANK[rightTier];
+      ACTIVE_THREAD_SORT_TIER_RANK[resolveActiveThreadSortTier(left, lastVisitedAtFor?.(left))] -
+      ACTIVE_THREAD_SORT_TIER_RANK[resolveActiveThreadSortTier(right, lastVisitedAtFor?.(right))];
     if (tierDiff !== 0) return tierDiff;
-
-    if (leftTier === "rest") {
-      return (
-        parseTimestampMs(right.createdAt) - parseTimestampMs(left.createdAt) ||
-        left.id.localeCompare(right.id)
-      );
-    }
 
     return (
       resolveActiveThreadAttentionRecencyMs(right) - resolveActiveThreadAttentionRecencyMs(left) ||
@@ -681,14 +671,13 @@ export { sortPinnedThreadsByOrderKey as sortPinnedThreadsForSidebar } from "@t3t
  * Keeping the input order means lifecycle ordering (active, snoozed, settled)
  * remains stable while the user narrows the list.
  */
-export function searchSidebarThreadsByTitle<
-  T extends { readonly title: string },
->(threads: readonly T[], query: string): T[] {
+export function searchSidebarThreadsByTitle<T extends { readonly title: string }>(
+  threads: readonly T[],
+  query: string,
+): T[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return [];
-  return threads.filter((thread) =>
-    thread.title.toLowerCase().includes(normalizedQuery),
-  );
+  return threads.filter((thread) => thread.title.toLowerCase().includes(normalizedQuery));
 }
 
 type SettledTimestampInput = Pick<
@@ -701,9 +690,7 @@ type SettledTimestampInput = Pick<
     threadLastActivityAt feeds the auto-settle window (user message plus all
     latestTurn stamps), so a thread whose last activity was a turn completion
     doesn't sort by an older message time. updatedAt is the final net. */
-export function resolveSettledTimestamp(
-  thread: SettledTimestampInput,
-): string | null {
+export function resolveSettledTimestamp(thread: SettledTimestampInput): string | null {
   const settledAt = firstValidTimestamp(thread.settledAt);
   if (settledAt !== null) return settledAt;
   let latest: string | null = null;
@@ -734,8 +721,7 @@ export function sortSettledThreadsForSidebar<
     return timestamp === null ? 0 : Date.parse(timestamp);
   };
   return [...threads].toSorted(
-    (left, right) =>
-      timestampMs(right) - timestampMs(left) || left.id.localeCompare(right.id),
+    (left, right) => timestampMs(right) - timestampMs(left) || left.id.localeCompare(right.id),
   );
 }
 
@@ -748,19 +734,13 @@ export function resolveWorkingStartedAt(
 ): string | null {
   const turn = thread.latestTurn;
   if (turn && turn.completedAt === null) {
-    return firstValidTimestamp(
-      turn.startedAt,
-      turn.requestedAt,
-      thread.session?.updatedAt,
-    );
+    return firstValidTimestamp(turn.startedAt, turn.requestedAt, thread.session?.updatedAt);
   }
   return firstValidTimestamp(thread.session?.updatedAt);
 }
 
 export function formatWorkingDurationLabel(elapsedMs: number): string {
-  const seconds = Number.isFinite(elapsedMs)
-    ? Math.max(0, Math.floor(elapsedMs / 1000))
-    : 0;
+  const seconds = Number.isFinite(elapsedMs) ? Math.max(0, Math.floor(elapsedMs / 1000)) : 0;
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
@@ -867,8 +847,7 @@ export function resolveProjectStatusIndicator(
     if (status === null) continue;
     if (
       highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] >
-        THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
+      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
     ) {
       highestPriorityStatus = status;
     }
@@ -877,9 +856,7 @@ export function resolveProjectStatusIndicator(
   return highestPriorityStatus;
 }
 
-export function getVisibleThreadsForProject<
-  T extends Pick<Thread, "id">,
->(input: {
+export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input: {
   threads: readonly T[];
   activeThreadId: T["id"] | undefined;
   isThreadListExpanded: boolean;
@@ -901,10 +878,7 @@ export function getVisibleThreadsForProject<
   }
 
   const previewThreads = threads.slice(0, previewLimit);
-  if (
-    !activeThreadId ||
-    previewThreads.some((thread) => thread.id === activeThreadId)
-  ) {
+  if (!activeThreadId || previewThreads.some((thread) => thread.id === activeThreadId)) {
     return {
       hasHiddenThreads: true,
       hiddenThreads: threads.slice(previewLimit),
@@ -921,9 +895,7 @@ export function getVisibleThreadsForProject<
     };
   }
 
-  const visibleThreadIds = new Set(
-    [...previewThreads, activeThread].map((thread) => thread.id),
-  );
+  const visibleThreadIds = new Set([...previewThreads, activeThread].map((thread) => thread.id));
 
   return {
     hasHiddenThreads: true,
@@ -933,8 +905,7 @@ export function getVisibleThreadsForProject<
 }
 
 export function getFallbackThreadIdAfterDelete<
-  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> &
-    ThreadSortInput,
+  T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
 >(input: {
   threads: readonly T[];
   deletedThreadId: T["id"];
@@ -966,8 +937,7 @@ export function getProjectSortTimestamp(
 ): number {
   if (projectThreads.length > 0) {
     return projectThreads.reduce(
-      (latest, thread) =>
-        Math.max(latest, getThreadSortTimestamp(thread, sortOrder)),
+      (latest, thread) => Math.max(latest, getThreadSortTimestamp(thread, sortOrder)),
       Number.NEGATIVE_INFINITY,
     );
   }
@@ -975,10 +945,7 @@ export function getProjectSortTimestamp(
   if (sortOrder === "created_at") {
     return toSortableTimestamp(project.createdAt) ?? Number.NEGATIVE_INFINITY;
   }
-  return (
-    toSortableTimestamp(project.updatedAt ?? project.createdAt) ??
-    Number.NEGATIVE_INFINITY
-  );
+  return toSortableTimestamp(project.updatedAt ?? project.createdAt) ?? Number.NEGATIVE_INFINITY;
 }
 
 function sortProjectsByActivity<TProject extends SidebarProject>(
@@ -992,30 +959,17 @@ function sortProjectsByActivity<TProject extends SidebarProject>(
   }
 
   return [...projects].toSorted((left, right) => {
-    const rightTimestamp = getProjectSortTimestamp(
-      right,
-      getProjectThreads(right),
-      sortOrder,
-    );
-    const leftTimestamp = getProjectSortTimestamp(
-      left,
-      getProjectThreads(left),
-      sortOrder,
-    );
+    const rightTimestamp = getProjectSortTimestamp(right, getProjectThreads(right), sortOrder);
+    const leftTimestamp = getProjectSortTimestamp(left, getProjectThreads(left), sortOrder);
     const byTimestamp =
-      rightTimestamp === leftTimestamp
-        ? 0
-        : rightTimestamp > leftTimestamp
-          ? 1
-          : -1;
+      rightTimestamp === leftTimestamp ? 0 : rightTimestamp > leftTimestamp ? 1 : -1;
     return byTimestamp || compareTies(left, right);
   });
 }
 
 export function sortProjectsForSidebar<
   TProject extends SidebarProject,
-  TThread extends Pick<Thread, "projectId" | "createdAt" | "updatedAt"> &
-    ThreadSortInput,
+  TThread extends Pick<Thread, "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
 >(
   projects: readonly TProject[],
   threads: readonly TThread[],
@@ -1032,8 +986,7 @@ export function sortProjectsForSidebar<
     projects,
     sortOrder,
     (project) => threadsByProjectId.get(project.id) ?? [],
-    (left, right) =>
-      left.title.localeCompare(right.title) || left.id.localeCompare(right.id),
+    (left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id),
   );
 }
 
@@ -1049,19 +1002,14 @@ export function sortLogicalProjectsForSidebar<
     projects.flatMap((project) =>
       project.memberProjectRefs.map(
         (projectRef) =>
-          [
-            `${projectRef.environmentId}\0${projectRef.projectId}`,
-            project.projectKey,
-          ] as const,
+          [`${projectRef.environmentId}\0${projectRef.projectId}`, project.projectKey] as const,
       ),
     ),
   );
   const threadsByProjectKey = new Map<string, TThread[]>();
   for (const thread of threads) {
     if (thread.archivedAt !== null) continue;
-    const projectKey = groupKeyByProjectRef.get(
-      `${thread.environmentId}\0${thread.projectId}`,
-    );
+    const projectKey = groupKeyByProjectRef.get(`${thread.environmentId}\0${thread.projectId}`);
     if (!projectKey) continue;
     const existing = threadsByProjectKey.get(projectKey);
     if (existing) {
@@ -1076,8 +1024,7 @@ export function sortLogicalProjectsForSidebar<
     sortOrder,
     (project) => threadsByProjectKey.get(project.projectKey) ?? [],
     (left, right) =>
-      left.title.localeCompare(right.title) ||
-      left.projectKey.localeCompare(right.projectKey),
+      left.title.localeCompare(right.title) || left.projectKey.localeCompare(right.projectKey),
   );
 }
 
@@ -1110,8 +1057,7 @@ export function sortScopedProjectsForSidebar<
   return sortProjectsByActivity(
     projects,
     sortOrder,
-    (project) =>
-      threadsByProject.get(scopedKey(project.environmentId, project.id)) ?? [],
+    (project) => threadsByProject.get(scopedKey(project.environmentId, project.id)) ?? [],
     (left, right) =>
       left.title.localeCompare(right.title) ||
       left.environmentId.localeCompare(right.environmentId) ||

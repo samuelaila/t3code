@@ -249,6 +249,7 @@ function SidebarThreadTooltip({
   environmentLabel,
   driverKind,
   modelInstanceId,
+  providerDisplayName,
   modelLabel,
   branchMismatch,
   terminalStatus,
@@ -261,6 +262,7 @@ function SidebarThreadTooltip({
   environmentLabel: string | null;
   driverKind: ProviderInstanceEntry["driverKind"] | null;
   modelInstanceId: string;
+  providerDisplayName: string;
   modelLabel: string;
   branchMismatch: {
     threadBranch: string;
@@ -317,7 +319,8 @@ function SidebarThreadTooltip({
             <div className="flex min-w-0 items-center gap-2">
               <ProviderInstanceIcon
                 driverKind={driverKind}
-                displayName={thread.session?.providerName ?? modelInstanceId}
+                displayName={providerDisplayName}
+                extraHints={[thread.session?.providerName, modelInstanceId, modelLabel]}
                 iconClassName="size-3 shrink-0 grayscale opacity-60"
               />
               <div className="min-w-0 truncate text-foreground/75">{modelLabel}</div>
@@ -879,6 +882,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       environmentLabel={props.environmentLabel}
       driverKind={driverKind}
       modelInstanceId={modelInstanceId}
+      providerDisplayName={providerEntry?.displayName ?? modelInstanceId}
       modelLabel={modelLabel}
       branchMismatch={branchMismatch}
       terminalStatus={terminalStatus}
@@ -1463,7 +1467,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                   <span className="inline-flex shrink-0 items-center opacity-60">
                     <ProviderInstanceIcon
                       driverKind={driverKind}
-                      displayName={thread.session?.providerName ?? modelInstanceId}
+                      displayName={providerEntry?.displayName ?? modelInstanceId}
+                      extraHints={[thread.session?.providerName, modelInstanceId, modelLabel]}
                       iconClassName="size-3.5"
                     />
                   </span>
@@ -1581,6 +1586,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
           environmentLabel={props.environmentLabel}
           driverKind={driverKind}
           modelInstanceId={modelInstanceId}
+          providerDisplayName={providerEntry?.displayName ?? modelInstanceId}
           modelLabel={modelLabel}
           branchMismatch={branchMismatch}
           terminalStatus={terminalStatus}
@@ -1902,6 +1908,8 @@ export default function Sidebar() {
   // merging, no optimistic holds. Archived threads remain hidden here —
   // archive keeps its original "remove from sidebar" meaning.
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
+  // Unread-Done ordering needs each row's last visit, which only lives here.
+  const threadLastVisitedAtById = useUiStateStore((store) => store.threadLastVisitedAtById);
   const {
     pinnedThreads,
     reorderablePinnedKeys,
@@ -1982,7 +1990,11 @@ export default function Sidebar() {
           )
           .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
       ),
-      activeThreads: sortThreadsForSidebar(active),
+      activeThreads: sortThreadsForSidebar(
+        active,
+        (thread) =>
+          threadLastVisitedAtById[scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))],
+      ),
       // Soonest wake first: "what comes back next" is the shelf's question.
       snoozedThreads: snoozed.toSorted(
         (left, right) =>
@@ -2000,6 +2012,7 @@ export default function Sidebar() {
     scopedProjectKeys,
     serverConfigs,
     snoozeWakeTick,
+    threadLastVisitedAtById,
     threads,
   ]);
 
