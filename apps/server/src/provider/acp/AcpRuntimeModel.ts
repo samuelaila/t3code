@@ -11,7 +11,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isSessionModelState(value: unknown): value is EffectAcpSchema.SessionModelState {
+function isSessionModelState(
+  value: unknown,
+): value is EffectAcpSchema.SessionModelState {
   if (!isRecord(value) || typeof value.currentModelId !== "string") {
     return false;
   }
@@ -29,7 +31,9 @@ function isSessionModelState(value: unknown): value is EffectAcpSchema.SessionMo
   );
 }
 
-function isSessionModeState(value: unknown): value is EffectAcpSchema.SessionModeState {
+function isSessionModeState(
+  value: unknown,
+): value is EffectAcpSchema.SessionModeState {
   if (!isRecord(value) || typeof value.currentModeId !== "string") {
     return false;
   }
@@ -108,6 +112,13 @@ export type AcpParsedSessionEvent =
       readonly itemId?: string;
       readonly text: string;
       readonly rawPayload: unknown;
+    }
+  | {
+      readonly _tag: "UsageUpdated";
+      readonly used: number;
+      readonly size?: number;
+      readonly cost?: EffectAcpSchema.Cost | null;
+      readonly rawPayload: unknown;
     };
 
 type AcpSessionSetupResponse =
@@ -120,7 +131,9 @@ type AcpToolCallUpdate = Extract<
   { readonly sessionUpdate: "tool_call" | "tool_call_update" }
 >;
 
-export function extractModelConfigId(sessionResponse: AcpSessionSetupResponse): string | undefined {
+export function extractModelConfigId(
+  sessionResponse: AcpSessionSetupResponse,
+): string | undefined {
   const configOptions = sessionResponse.configOptions;
   if (!configOptions) return undefined;
   for (const opt of configOptions) {
@@ -132,7 +145,8 @@ export function extractModelConfigId(sessionResponse: AcpSessionSetupResponse): 
 }
 
 export function findSessionConfigOption(
-  configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
+  configOptions:
+    ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined,
   configId: string,
 ): EffectAcpSchema.SessionConfigOption | undefined {
   if (!configOptions) {
@@ -142,7 +156,9 @@ export function findSessionConfigOption(
   if (!normalizedConfigId) {
     return undefined;
   }
-  return configOptions.find((option) => option.id.trim() === normalizedConfigId);
+  return configOptions.find(
+    (option) => option.id.trim() === normalizedConfigId,
+  );
 }
 
 export function collectSessionConfigOptionValues(
@@ -152,7 +168,9 @@ export function collectSessionConfigOptionValues(
     return [];
   }
   return configOption.options.flatMap((entry) =>
-    "value" in entry ? [entry.value] : entry.options.map((option) => option.value),
+    "value" in entry
+      ? [entry.value]
+      : entry.options.map((option) => option.value),
   );
 }
 
@@ -188,7 +206,9 @@ export function parseSessionModeState(
   };
 }
 
-function normalizePlanStepStatus(raw: unknown): "pending" | "inProgress" | "completed" {
+function normalizePlanStepStatus(
+  raw: unknown,
+): "pending" | "inProgress" | "completed" {
   switch (raw) {
     case "completed":
       return "completed";
@@ -238,7 +258,9 @@ function normalizeCommandValue(value: unknown): string | undefined {
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
-function extractCommandFromTitle(title: string | undefined): string | undefined {
+function extractCommandFromTitle(
+  title: string | undefined,
+): string | undefined {
   if (!title) {
     return undefined;
   }
@@ -246,13 +268,17 @@ function extractCommandFromTitle(title: string | undefined): string | undefined 
   return match?.[1]?.trim() || undefined;
 }
 
-function extractToolCallCommand(rawInput: unknown, title: string | undefined): string | undefined {
+function extractToolCallCommand(
+  rawInput: unknown,
+  title: string | undefined,
+): string | undefined {
   if (isRecord(rawInput)) {
     const directCommand = normalizeCommandValue(rawInput.command);
     if (directCommand) {
       return directCommand;
     }
-    const executable = typeof rawInput.executable === "string" ? rawInput.executable.trim() : "";
+    const executable =
+      typeof rawInput.executable === "string" ? rawInput.executable.trim() : "";
     const args = normalizeCommandValue(rawInput.args);
     if (executable && args) {
       return `${executable} ${args}`;
@@ -286,10 +312,14 @@ function extractTextContentFromToolCallContent(
 }
 
 function normalizeToolKind(kind: unknown): string | undefined {
-  return typeof kind === "string" && kind.trim().length > 0 ? kind.trim() : undefined;
+  return typeof kind === "string" && kind.trim().length > 0
+    ? kind.trim()
+    : undefined;
 }
 
-function canonicalItemTypeFromAcpToolKind(kind: string | undefined): ToolLifecycleItemType {
+function canonicalItemTypeFromAcpToolKind(
+  kind: string | undefined,
+): ToolLifecycleItemType {
   switch (kind) {
     case "execute":
       return "command_execution";
@@ -313,8 +343,10 @@ function makeToolCallState(
     readonly status?: EffectAcpSchema.ToolCallStatus | null | undefined;
     readonly rawInput?: unknown;
     readonly rawOutput?: unknown;
-    readonly content?: ReadonlyArray<EffectAcpSchema.ToolCallContent> | null | undefined;
-    readonly locations?: ReadonlyArray<EffectAcpSchema.ToolCallLocation> | null | undefined;
+    readonly content?:
+      ReadonlyArray<EffectAcpSchema.ToolCallContent> | null | undefined;
+    readonly locations?:
+      ReadonlyArray<EffectAcpSchema.ToolCallLocation> | null | undefined;
   },
   options?: {
     readonly fallbackStatus?: "pending" | "inProgress" | "completed" | "failed";
@@ -328,7 +360,9 @@ function makeToolCallState(
   const command = extractToolCallCommand(input.rawInput, title);
   const textContent = extractTextContentFromToolCallContent(input.content);
   const normalizedTitle =
-    title && title.toLowerCase() !== "terminal" && title.toLowerCase() !== "tool call"
+    title &&
+    title.toLowerCase() !== "terminal" &&
+    title.toLowerCase() !== "tool call"
       ? title
       : undefined;
   const data: Record<string, unknown> = { toolCallId };
@@ -404,7 +438,8 @@ export function mergeToolCallState(
   previous: AcpToolCallState | undefined,
   next: AcpToolCallState,
 ): AcpToolCallState {
-  const nextKind = typeof next.data.kind === "string" ? next.data.kind : undefined;
+  const nextKind =
+    typeof next.data.kind === "string" ? next.data.kind : undefined;
   const kind = nextKind ?? previous?.kind;
   const title = next.title ?? previous?.title;
   const status = next.status ?? previous?.status;
@@ -445,7 +480,9 @@ export function parsePermissionRequest(
     toolCall?.command ??
     toolCall?.title ??
     toolCall?.detail ??
-    (typeof params.sessionId === "string" ? `Session ${params.sessionId}` : undefined);
+    (typeof params.sessionId === "string"
+      ? `Session ${params.sessionId}`
+      : undefined);
   return {
     kind,
     ...(detail ? { detail } : {}),
@@ -453,7 +490,9 @@ export function parsePermissionRequest(
   };
 }
 
-export function sessionUpdateIsReplay(params: EffectAcpSchema.SessionNotification): boolean {
+export function sessionUpdateIsReplay(
+  params: EffectAcpSchema.SessionNotification,
+): boolean {
   const meta = params._meta;
   return isRecord(meta) && meta.isReplay === true;
 }
@@ -480,7 +519,9 @@ export const waitForSessionLoadReplayIdle = (input: {
         const idleGapMillis = Duration.toMillis(gate.value.idleGap);
         const nowMillis = yield* Clock.currentTimeMillis;
         if (nowMillis - gate.value.lastActivityAtMillis >= idleGapMillis) {
-          return syntheticLoadSessionResponseFromInitialize(gate.value.initializeResult);
+          return syntheticLoadSessionResponseFromInitialize(
+            gate.value.initializeResult,
+          );
         }
       }
       yield* Effect.sleep(pollInterval);
@@ -505,7 +546,9 @@ export function syntheticLoadSessionResponseFromInitialize(
   };
 }
 
-export function parseSessionUpdateEvent(params: EffectAcpSchema.SessionNotification): {
+export function parseSessionUpdateEvent(
+  params: EffectAcpSchema.SessionNotification,
+): {
   readonly modeId?: string;
   readonly events: ReadonlyArray<AcpParsedSessionEvent>;
 } {
@@ -526,7 +569,10 @@ export function parseSessionUpdateEvent(params: EffectAcpSchema.SessionNotificat
     }
     case "plan": {
       const plan = upd.entries.map((entry, index) => ({
-        step: entry.content.trim().length > 0 ? entry.content.trim() : `Step ${index + 1}`,
+        step:
+          entry.content.trim().length > 0
+            ? entry.content.trim()
+            : `Step ${index + 1}`,
         status: normalizePlanStepStatus(entry.status),
       }));
       if (plan.length > 0) {
@@ -572,6 +618,16 @@ export function parseSessionUpdateEvent(params: EffectAcpSchema.SessionNotificat
           rawPayload: params,
         });
       }
+      break;
+    }
+    case "usage_update": {
+      events.push({
+        _tag: "UsageUpdated",
+        used: upd.used,
+        ...(upd.size !== undefined ? { size: upd.size } : {}),
+        ...(upd.cost !== undefined ? { cost: upd.cost } : {}),
+        rawPayload: params,
+      });
       break;
     }
     default:

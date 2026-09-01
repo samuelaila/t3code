@@ -104,7 +104,9 @@ describe("AcpRuntimeModel", () => {
       _meta: {
         modelState: {
           currentModelId: "grok-build",
-          availableModels: [{ modelId: "grok-build", name: "Grok Build", description: null }],
+          availableModels: [
+            { modelId: "grok-build", name: "Grok Build", description: null },
+          ],
         },
       },
     } satisfies EffectAcpSchema.InitializeResponse);
@@ -244,8 +246,13 @@ describe("AcpRuntimeModel", () => {
     expect(updated.events[0]?._tag).toBe("ToolCallUpdated");
     const createdEvent = created.events[0];
     const updatedEvent = updated.events[0];
-    if (createdEvent?._tag === "ToolCallUpdated" && updatedEvent?._tag === "ToolCallUpdated") {
-      expect(mergeToolCallState(createdEvent.toolCall, updatedEvent.toolCall)).toMatchObject({
+    if (
+      createdEvent?._tag === "ToolCallUpdated" &&
+      updatedEvent?._tag === "ToolCallUpdated"
+    ) {
+      expect(
+        mergeToolCallState(createdEvent.toolCall, updatedEvent.toolCall),
+      ).toMatchObject({
         toolCallId: "tool-1",
         status: "completed",
         title: "Ran command",
@@ -299,7 +306,11 @@ describe("AcpRuntimeModel", () => {
           update: {
             sessionUpdate: "plan",
             entries: [
-              { content: " Inspect state ", priority: "high", status: "completed" },
+              {
+                content: " Inspect state ",
+                priority: "high",
+                status: "completed",
+              },
               { content: "", priority: "medium", status: "in_progress" },
             ],
           },
@@ -372,6 +383,35 @@ describe("AcpRuntimeModel", () => {
         status: "pending",
         command: "cat package.json",
       },
+    });
+  });
+
+  it("parses usage_update session notification events into UsageUpdated events", () => {
+    const events = parseSessionUpdateEvent({
+      sessionId: "session-1",
+      update: {
+        sessionUpdate: "usage_update",
+        used: 12_500,
+        size: 500_000,
+      },
+    });
+
+    expect(events).toEqual({
+      events: [
+        {
+          _tag: "UsageUpdated",
+          used: 12_500,
+          size: 500_000,
+          rawPayload: {
+            sessionId: "session-1",
+            update: {
+              sessionUpdate: "usage_update",
+              used: 12_500,
+              size: 500_000,
+            },
+          },
+        },
+      ],
     });
   });
 });

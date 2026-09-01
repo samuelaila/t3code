@@ -1,9 +1,24 @@
 import { describe, expect, it } from "vite-plus/test";
-import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
+import {
+  EventId,
+  type OrchestrationThreadActivity,
+  TurnId,
+} from "@t3tools/contracts";
 
-import { deriveLatestContextWindowSnapshot, formatContextWindowTokens } from "./contextWindow";
+import {
+  deriveEffectiveContextWindowSnapshot,
+  deriveLatestContextWindowSnapshot,
+  formatContextWindowTokens,
+  formatProviderDisplayName,
+  resolveAutoCompactPercentage,
+  resolveModelContextWindow,
+} from "./contextWindow";
 
-function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
+function makeActivity(
+  id: string,
+  kind: string,
+  payload: unknown,
+): OrchestrationThreadActivity {
   return {
     id: EventId.make(id),
     tone: "info",
@@ -80,5 +95,41 @@ describe("contextWindow", () => {
 
     expect(snapshot?.usedTokens).toBe(81_659);
     expect(snapshot?.totalProcessedTokens).toBe(748_126);
+  });
+
+  it("formats provider display names correctly for all providers", () => {
+    expect(formatProviderDisplayName("grok")).toBe("Grok");
+    expect(formatProviderDisplayName("claudeAgent")).toBe("Claude");
+    expect(formatProviderDisplayName("codex")).toBe("Codex");
+    expect(formatProviderDisplayName("cursor")).toBe("Cursor");
+    expect(formatProviderDisplayName("hermes")).toBe("Hermes");
+    expect(formatProviderDisplayName("opencode")).toBe("OpenCode");
+    expect(formatProviderDisplayName("gemini")).toBe("Gemini");
+  });
+
+  it("resolves model context window and auto compact threshold", () => {
+    expect(resolveModelContextWindow("grok-4.5")).toBe(500_000);
+    expect(resolveModelContextWindow("grok-4.6")).toBe(500_000);
+    expect(resolveModelContextWindow("gemini-2.5-flash")).toBe(1_000_000);
+    expect(resolveModelContextWindow("claude-3-7-sonnet")).toBe(200_000);
+    expect(resolveModelContextWindow("claude-3-7-sonnet-1m")).toBe(1_000_000);
+    expect(resolveModelContextWindow("deepseek-v3")).toBe(128_000);
+
+    expect(resolveAutoCompactPercentage("grok-4.5")).toBe(80);
+    expect(resolveAutoCompactPercentage("claude-3-7-sonnet")).toBe(80);
+    expect(resolveAutoCompactPercentage("gpt-4o")).toBeNull();
+  });
+
+  it("derives effective snapshot with fallback defaults when no turn usage exists", () => {
+    const effective = deriveEffectiveContextWindowSnapshot(null, {
+      model: "grok-4.5",
+      provider: "grok",
+    });
+
+    expect(effective.usedTokens).toBe(0);
+    expect(effective.maxTokens).toBe(500_000);
+    expect(effective.remainingTokens).toBe(500_000);
+    expect(effective.usedPercentage).toBe(0);
+    expect(effective.compactsAutomatically).toBe(true);
   });
 });
