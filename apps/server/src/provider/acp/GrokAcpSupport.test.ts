@@ -6,6 +6,7 @@ import {
   applyGrokAcpModelSelection,
   buildGrokAcpSpawnInput,
   grokAcpSpawnArgs,
+  grokAvailableModelIdsFromSessionSetup,
   isValidGrokReasoningEffortToken,
   resolveGrokAcpBaseModelId,
 } from "./GrokAcpSupport.ts";
@@ -192,6 +193,70 @@ describe("applyGrokAcpModelSelection", () => {
     }),
   );
 
+  // xAI retired `grok-build` on 2026-09-01, leaving only grok-4.5 / grok-4.6.
+  // Threads pinned to it were taking a JSON-RPC "Invalid params" on every open.
+  it.effect("keeps the session's model when the CLI no longer lists the pinned one", () =>
+    Effect.gen(function* () {
+      const { runtime, modelCalls } = makeRecordingRuntime();
+      const result = yield* applyGrokAcpModelSelection({
+        runtime,
+        currentModelId: "grok-4.6",
+        requestedModelId: "grok-build",
+        availableModelIds: new Set(["grok-4.6", "grok-4.5"]),
+        mapError: (cause) => cause.message,
+      });
+      expect(modelCalls).toEqual([]);
+      expect(result).toBe("grok-4.6");
+    }),
+  );
+
+  it.effect("still applies reasoning effort when the pinned model was dropped", () =>
+    Effect.gen(function* () {
+      const { runtime, modelCalls } = makeRecordingRuntime();
+      const result = yield* applyGrokAcpModelSelection({
+        runtime,
+        currentModelId: "grok-4.6",
+        currentReasoningEffort: "high",
+        requestedModelId: "grok-build",
+        requestedReasoningEffort: "xhigh",
+        availableModelIds: new Set(["grok-4.6"]),
+        mapError: (cause) => cause.message,
+      });
+      expect(modelCalls).toEqual([{ modelId: "grok-4.6", meta: { reasoningEffort: "xhigh" } }]);
+      expect(result).toBe("grok-4.6");
+    }),
+  );
+
+  it.effect("still switches to a model the CLI does list", () =>
+    Effect.gen(function* () {
+      const { runtime, modelCalls } = makeRecordingRuntime();
+      const result = yield* applyGrokAcpModelSelection({
+        runtime,
+        currentModelId: "grok-4.6",
+        requestedModelId: "grok-4.5",
+        availableModelIds: new Set(["grok-4.6", "grok-4.5"]),
+        mapError: (cause) => cause.message,
+      });
+      expect(modelCalls).toEqual([{ modelId: "grok-4.5" }]);
+      expect(result).toBe("grok-4.5");
+    }),
+  );
+
+  it.effect("does not filter when the CLI advertised no models at all", () =>
+    Effect.gen(function* () {
+      const { runtime, modelCalls } = makeRecordingRuntime();
+      const result = yield* applyGrokAcpModelSelection({
+        runtime,
+        currentModelId: "grok-4.6",
+        requestedModelId: "grok-mock-alt",
+        availableModelIds: new Set<string>(),
+        mapError: (cause) => cause.message,
+      });
+      expect(modelCalls).toEqual([{ modelId: "grok-mock-alt" }]);
+      expect(result).toBe("grok-mock-alt");
+    }),
+  );
+
   it.effect("propagates session/set_model failures via mapError", () =>
     Effect.gen(function* () {
       const failure = EffectAcpErrors.AcpRequestError.invalidParams("session id not known");
@@ -207,4 +272,29 @@ describe("applyGrokAcpModelSelection", () => {
       expect(error).toBe(failure.message);
     }),
   );
+});
+
+describe("grokAvailableModelIdsFromSessionSetup", () => {
+  it("reads and trims the ids the CLI advertised", () => {
+    const ids = grokAvailableModelIdsFromSessionSetup({
+      models: {
+        currentModelId: "grok-4.6",
+        availableModels: [
+          { modelId: "  grok-4.6  ", name: "Grok 4.6" },
+          { modelId: "grok-4.5", name: "Grok 4.5" },
+          { modelId: "   ", name: "blank" },
+        ],
+      },
+    } as Parameters<typeof grokAvailableModelIdsFromSessionSetup>[0]);
+
+    expect([...ids].sort()).toEqual(["grok-4.5", "grok-4.6"]);
+  });
+
+  it("returns an empty set when the CLI said nothing, so callers skip the check", () => {
+    expect(
+      grokAvailableModelIdsFromSessionSetup(
+        {} as Parameters<typeof grokAvailableModelIdsFromSessionSetup>[0],
+      ).size,
+    ).toBe(0);
+  });
 });

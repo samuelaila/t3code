@@ -124,6 +124,29 @@ export function currentGrokModelIdFromSessionSetup(
   return sessionSetupResult.models?.currentModelId?.trim() || undefined;
 }
 
+/**
+ * The model ids this Grok CLI will actually accept, straight from session setup.
+ *
+ * xAI retires model ids (grok-build vanished on 2026-09-01, leaving only
+ * grok-4.5 / grok-4.6). A thread pinned to a retired id would otherwise ask for
+ * it forever and take a JSON-RPC "Invalid params" on every open.
+ *
+ * Empty set = the CLI told us nothing, so callers must not filter on it.
+ */
+export function grokAvailableModelIdsFromSessionSetup(
+  sessionSetupResult:
+    | EffectAcpSchema.LoadSessionResponse
+    | EffectAcpSchema.NewSessionResponse
+    | EffectAcpSchema.ResumeSessionResponse,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const model of sessionSetupResult.models?.availableModels ?? []) {
+    const id = model.modelId.trim();
+    if (id.length > 0) ids.add(id);
+  }
+  return ids;
+}
+
 export function currentGrokReasoningEffortFromSessionSetup(
   sessionSetupResult:
     | EffectAcpSchema.LoadSessionResponse
@@ -153,17 +176,28 @@ export function applyGrokAcpModelSelection<E>(input: {
   readonly currentReasoningEffort?: string | undefined;
   readonly requestedModelId: string | undefined;
   readonly requestedReasoningEffort?: string | undefined;
+  /** From `grokAvailableModelIdsFromSessionSetup`. Empty/absent disables the check. */
+  readonly availableModelIds?: ReadonlySet<string> | undefined;
   readonly mapError: (cause: EffectAcpErrors.AcpError) => E;
 }): Effect.Effect<string | undefined, E> {
-  const modelChanged =
-    input.requestedModelId !== undefined && input.requestedModelId !== input.currentModelId;
+  // A thread pinned to a model xAI has since retired must not take the session
+  // down with it — keep whatever model the CLI says the session is already on,
+  // and still honour any reasoning change that came with the request.
+  const requestedModelId =
+    input.requestedModelId !== undefined &&
+    input.availableModelIds !== undefined &&
+    input.availableModelIds.size > 0 &&
+    !input.availableModelIds.has(input.requestedModelId)
+      ? undefined
+      : input.requestedModelId;
+  const modelChanged = requestedModelId !== undefined && requestedModelId !== input.currentModelId;
   const reasoningProvided = input.requestedReasoningEffort !== undefined;
   const reasoningEffort = reasoningProvided
     ? normalizeGrokReasoningEffort(input.requestedReasoningEffort)
     : undefined;
   const reasoningEffortChanged =
     reasoningProvided && reasoningEffort !== input.currentReasoningEffort;
-  const targetModelId = input.requestedModelId ?? input.currentModelId;
+  const targetModelId = requestedModelId ?? input.currentModelId;
   if ((!modelChanged && !reasoningEffortChanged) || targetModelId === undefined) {
     return Effect.succeed(input.currentModelId);
   }

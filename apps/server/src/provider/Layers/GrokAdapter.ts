@@ -64,6 +64,7 @@ import {
   applyGrokAcpModelSelection,
   currentGrokModelIdFromSessionSetup,
   currentGrokReasoningEffortFromSessionSetup,
+  grokAvailableModelIdsFromSessionSetup,
   makeGrokAcpRuntime,
   normalizeGrokReasoningEffort,
   resolveGrokAcpBaseModelId,
@@ -163,6 +164,8 @@ interface GrokSessionContext {
   promptResponsesReady: number;
   currentModelId: string | undefined;
   currentReasoningEffort: string | undefined;
+  /** Model ids this CLI accepts; a thread pinned to a retired one is not sent. */
+  readonly availableModelIds: ReadonlySet<string>;
   stopped: boolean;
 }
 
@@ -1236,12 +1239,16 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             grokModelSelection,
             "reasoningEffort",
           );
+          const availableModelIds = grokAvailableModelIdsFromSessionSetup(
+            started.sessionSetupResult,
+          );
           const boundModelId = yield* applyGrokAcpModelSelection({
             runtime: acp,
             currentModelId: currentStartModelId,
             currentReasoningEffort: currentStartReasoningEffort,
             requestedModelId: requestedStartModelId,
             requestedReasoningEffort: requestedStartReasoningEffort,
+            availableModelIds,
             mapError: (cause) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, "session/set_model", cause),
           });
@@ -1287,6 +1294,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             livenessUpdatesInFlight: 0,
             promptResponsesReady: 0,
             currentModelId: boundModelId,
+            availableModelIds,
             currentReasoningEffort:
               requestedStartReasoningEffort !== undefined
                 ? normalizeGrokReasoningEffort(requestedStartReasoningEffort)
@@ -1574,6 +1582,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
                 currentReasoningEffort: ctx.currentReasoningEffort,
                 requestedModelId: requestedTurnModelId,
                 requestedReasoningEffort: requestedTurnReasoningEffort,
+                availableModelIds: ctx.availableModelIds,
                 mapError: (cause) =>
                   mapAcpToAdapterError(PROVIDER, input.threadId, "session/set_model", cause),
               });
