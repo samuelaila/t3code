@@ -1,4 +1,5 @@
 import * as React from "react";
+import { defaultAnimateLayoutChanges, type AnimateLayoutChanges } from "@dnd-kit/sortable";
 import type { ContextMenuItem } from "@t3tools/contracts";
 import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
 import {
@@ -11,10 +12,9 @@ import type { SidebarThreadSummary, Thread } from "../types";
 import type { ThreadRouteTarget } from "../threadRoutes";
 import { cn } from "../lib/utils";
 import { isLatestTurnSettled } from "../session-logic";
-import { resolveServerBackedAppStageLabel } from "../branding.logic";
 
 export const THREAD_SELECTION_SAFE_SELECTOR = "[data-thread-item], [data-thread-selection-safe]";
-export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
+export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 200;
 // Visible sidebar rows are prewarmed into the thread-detail cache so opening a
 // nearby thread usually reuses an already-hot subscription. Each prewarmed
 // thread holds a live, fully hydrated detail subscription (all messages and
@@ -22,6 +22,12 @@ export const THREAD_JUMP_HINT_SHOW_DELAY_MS = 100;
 // so this limit is a direct renderer-heap and server-load multiplier — keep
 // it small; cold opens still render instantly from the cached snapshot.
 export const SIDEBAR_THREAD_PREWARM_LIMIT = 3;
+
+// The list already reaches its destination through sortable transforms while
+// the pointer is down. dnd-kit's default also animates the committed DOM order
+// after release, replaying the same movement across every affected row.
+export const animatePinnedLayoutChanges: AnimateLayoutChanges = (args) =>
+  args.isSorting ? defaultAnimateLayoutChanges(args) : false;
 
 type SidebarProject = {
   id: string;
@@ -160,13 +166,6 @@ type ThreadStatusInput = Pick<
 export interface ThreadJumpHintVisibilityController {
   sync: (shouldShow: boolean) => void;
   dispose: () => void;
-}
-
-export function resolveSidebarStageBadgeLabel(input: {
-  primaryServerVersion: string | null | undefined;
-  fallbackStageLabel: string;
-}): string {
-  return resolveServerBackedAppStageLabel(input);
 }
 
 export function createThreadJumpHintVisibilityController(input: {
@@ -548,6 +547,9 @@ type ActiveThreadActivityInput = {
   } | null;
   readonly backgroundLiveness?: SidebarThreadSummary["backgroundLiveness"];
   readonly lastVisitedAt?: string | null;
+  // Upstream re-anchors an un-settled row to the moment it came back; keep
+  // that so it surfaces inside its band instead of sinking to creation order.
+  readonly unsettledAt?: string | null | undefined;
 };
 
 /**
@@ -611,6 +613,7 @@ export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivi
     thread.latestTurn?.completedAt,
     thread.latestUserMessageAt,
     thread.latestTurn?.requestedAt,
+    thread.unsettledAt,
     thread.createdAt,
   ]) {
     if (candidate == null) continue;
@@ -678,6 +681,44 @@ export function searchSidebarThreadsByTitle<T extends { readonly title: string }
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) return [];
   return threads.filter((thread) => thread.title.toLowerCase().includes(normalizedQuery));
+}
+
+export function filterSidebarProjectScopeItems<TItem extends { readonly value: string }>(input: {
+  items: readonly TItem[];
+  activeScopeKey: string | null;
+  query: string;
+  matches: (item: TItem, query: string) => boolean;
+}): readonly TItem[] {
+  const projectItems = input.items.filter((item) => item.value !== "all");
+  const query = input.query.trim();
+  if (query.length > 0) {
+    return projectItems.filter((item) => input.matches(item, query));
+  }
+  return input.activeScopeKey === null ? projectItems : input.items;
+}
+
+export interface SidebarProjectScopeMenuState {
+  readonly open: boolean;
+  readonly query: string;
+}
+
+export type SidebarProjectScopeMenuAction =
+  | { readonly type: "query-changed"; readonly query: string }
+  | { readonly type: "open-changed"; readonly open: boolean }
+  | { readonly type: "project-settings-opened" };
+
+export function reduceSidebarProjectScopeMenuState(
+  state: SidebarProjectScopeMenuState,
+  action: SidebarProjectScopeMenuAction,
+): SidebarProjectScopeMenuState {
+  switch (action.type) {
+    case "query-changed":
+      return { ...state, query: action.query };
+    case "open-changed":
+      return { open: action.open, query: "" };
+    case "project-settings-opened":
+      return { open: false, query: "" };
+  }
 }
 
 type SettledTimestampInput = Pick<

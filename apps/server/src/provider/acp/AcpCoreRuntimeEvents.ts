@@ -13,11 +13,7 @@ import {
   type TurnId,
 } from "@t3tools/contracts";
 
-import type {
-  AcpPermissionRequest,
-  AcpPlanUpdate,
-  AcpToolCallState,
-} from "./AcpRuntimeModel.ts";
+import type { AcpPermissionRequest, AcpPlanUpdate, AcpToolCallState } from "./AcpRuntimeModel.ts";
 
 type AcpAdapterRawSource = Extract<
   RuntimeEventRawSource,
@@ -31,15 +27,10 @@ interface AcpEventStamp {
 
 type AcpCanonicalRequestType = Extract<
   CanonicalRequestType,
-  | "exec_command_approval"
-  | "file_read_approval"
-  | "file_change_approval"
-  | "dynamic_tool_call"
+  "exec_command_approval" | "file_read_approval" | "file_change_approval" | "dynamic_tool_call"
 >;
 
-function canonicalRequestTypeFromAcpKind(
-  kind: string | "unknown",
-): AcpCanonicalRequestType {
+function canonicalRequestTypeFromAcpKind(kind: string | "unknown"): AcpCanonicalRequestType {
   switch (kind) {
     case "execute":
       return "exec_command_approval";
@@ -54,9 +45,7 @@ function canonicalRequestTypeFromAcpKind(
   }
 }
 
-function canonicalItemTypeFromAcpToolKind(
-  kind: string | undefined,
-): ToolLifecycleItemType {
+function canonicalItemTypeFromAcpToolKind(kind: string | undefined): ToolLifecycleItemType {
   switch (kind) {
     case "execute":
       return "command_execution";
@@ -109,9 +98,7 @@ export function makeAcpRequestOpenedEvent(input: {
     turnId: input.turnId,
     requestId: input.requestId,
     payload: {
-      requestType: canonicalRequestTypeFromAcpKind(
-        input.permissionRequest.kind,
-      ),
+      requestType: canonicalRequestTypeFromAcpKind(input.permissionRequest.kind),
       detail: input.detail,
       args: input.args,
     },
@@ -140,9 +127,7 @@ export function makeAcpRequestResolvedEvent(input: {
     turnId: input.turnId,
     requestId: input.requestId,
     payload: {
-      requestType: canonicalRequestTypeFromAcpKind(
-        input.permissionRequest.kind,
-      ),
+      requestType: canonicalRequestTypeFromAcpKind(input.permissionRequest.kind),
       decision: input.decision,
     },
   };
@@ -181,13 +166,10 @@ export function makeAcpToolCallEvent(input: {
   readonly toolCall: AcpToolCallState;
   readonly rawPayload: unknown;
 }): ProviderRuntimeEvent {
-  const runtimeStatus = runtimeItemStatusFromAcpToolStatus(
-    input.toolCall.status,
-  );
+  const runtimeStatus = runtimeItemStatusFromAcpToolStatus(input.toolCall.status);
   return {
     type:
-      input.toolCall.status === "completed" ||
-      input.toolCall.status === "failed"
+      input.toolCall.status === "completed" || input.toolCall.status === "failed"
         ? "item.completed"
         : "item.updated",
     ...input.stamp,
@@ -200,9 +182,7 @@ export function makeAcpToolCallEvent(input: {
       ...(runtimeStatus ? { status: runtimeStatus } : {}),
       ...(input.toolCall.title ? { title: input.toolCall.title } : {}),
       ...(input.toolCall.detail ? { detail: input.toolCall.detail } : {}),
-      ...(Object.keys(input.toolCall.data).length > 0
-        ? { data: input.toolCall.data }
-        : {}),
+      ...(Object.keys(input.toolCall.data).length > 0 ? { data: input.toolCall.data } : {}),
     },
     raw: {
       source: "acp.jsonrpc",

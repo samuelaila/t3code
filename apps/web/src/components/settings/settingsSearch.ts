@@ -1,8 +1,12 @@
+import { isElectron } from "~/env";
+import { isWindowsPlatform } from "~/lib/utils";
+
 export type SettingsPath =
   | "/settings/general"
   | "/settings/appearance"
   | "/settings/keybindings"
   | "/settings/providers"
+  | "/settings/integrations"
   | "/settings/source-control"
   | "/settings/connections"
   | "/settings/archived";
@@ -12,6 +16,12 @@ export interface SettingsSearchItem {
   readonly title: string;
   readonly to: SettingsPath;
   readonly targetId?: string;
+  // Its row only renders in the desktop app, so a browser result would land on
+  // an anchor that isn't there.
+  readonly desktopOnly?: boolean;
+  // Its row only renders on Windows desktop, so other desktop platforms must
+  // not expose a result that points to a missing anchor.
+  readonly windowsOnly?: boolean;
 }
 
 /**
@@ -23,6 +33,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
   "/settings/providers": "Providers",
+  "/settings/integrations": "Integrations",
   "/settings/source-control": "Source Control",
   "/settings/connections": "Connections",
   "/settings/archived": "Archive",
@@ -49,6 +60,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     // Theme cards live directly under the scheme tiles; the section is the
     // stable scroll destination for both.
     targetId: "appearance",
+  },
+  {
+    // Prefixed because the slider control already owns the `appearance-contrast` id.
+    id: "setting-appearance-contrast",
+    title: "Contrast",
+    to: "/settings/appearance",
   },
   {
     // Prefixed because the slider control already owns the `glass-opacity` id.
@@ -119,6 +136,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "skills-in-slash-menu",
+    title: "Show skills in slash menu",
+    to: "/settings/general",
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",
@@ -140,6 +162,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
   },
   {
+    id: "unpin-confirmation",
+    title: "Unpin confirmation",
+    to: "/settings/general",
+  },
+  {
     id: "archive-confirmation",
     title: "Archive confirmation",
     to: "/settings/general",
@@ -148,6 +175,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "delete-confirmation",
     title: "Delete confirmation",
     to: "/settings/general",
+  },
+  {
+    id: "quit-confirmation",
+    title: "Hold to quit",
+    to: "/settings/general",
+    desktopOnly: true,
   },
   {
     id: "text-generation-model",
@@ -185,6 +218,42 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/providers",
   },
   {
+    id: "agent-browser-access",
+    title: "Agent browser access",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-default-viewport",
+    title: "Default browser viewport",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-default-zoom",
+    title: "Default browser zoom",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-default-appearance",
+    title: "Default browser appearance",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-recording-frame-rate",
+    title: "Browser recording frame rate",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
+    id: "browser-auto-show-floating-preview",
+    title: "Auto-show floating preview",
+    to: "/settings/integrations",
+    targetId: "browser",
+  },
+  {
     id: "source-control",
     title: "Source control",
     to: "/settings/source-control",
@@ -193,6 +262,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "remote-environments",
     title: "Remote environments",
     to: "/settings/connections",
+  },
+  {
+    id: "wsl-backend",
+    title: "WSL backend",
+    to: "/settings/connections",
+    desktopOnly: true,
+    windowsOnly: true,
   },
   {
     id: "archive",
@@ -236,5 +312,11 @@ export function searchSettings(
   const normalizedQuery = normalizeSearchText(query);
   if (normalizedQuery.length === 0) return [];
 
-  return items.filter((item) => normalizeSearchText(item.title).includes(normalizedQuery));
+  return items.filter(
+    (item) =>
+      (isElectron || item.desktopOnly !== true) &&
+      (!item.windowsOnly ||
+        isWindowsPlatform(typeof navigator === "undefined" ? "" : navigator.platform)) &&
+      normalizeSearchText(item.title).includes(normalizedQuery),
+  );
 }

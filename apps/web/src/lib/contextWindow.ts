@@ -1,12 +1,7 @@
-import type {
-  OrchestrationThreadActivity,
-  ThreadTokenUsageSnapshot,
-} from "@t3tools/contracts";
+import type { OrchestrationThreadActivity, ThreadTokenUsageSnapshot } from "@t3tools/contracts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : null;
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
 function asFiniteNumber(value: unknown): number | null {
@@ -18,9 +13,7 @@ function asBoolean(value: unknown): boolean | null {
 }
 
 type NullableContextWindowUsage = {
-  readonly [
-    Key in keyof ThreadTokenUsageSnapshot
-  ]: undefined extends ThreadTokenUsageSnapshot[Key]
+  readonly [Key in keyof ThreadTokenUsageSnapshot]: undefined extends ThreadTokenUsageSnapshot[Key]
     ? Exclude<ThreadTokenUsageSnapshot[Key], undefined> | null
     : ThreadTokenUsageSnapshot[Key];
 };
@@ -33,9 +26,7 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
 };
 
 /** Map a provider driver kind to a user-facing display name. */
-export function formatProviderDisplayName(
-  provider: string | null | undefined,
-): string {
+export function formatProviderDisplayName(provider: string | null | undefined): string {
   if (!provider) return "This agent";
   switch (provider) {
     case "claudeAgent":
@@ -77,11 +68,7 @@ export function resolveModelContextWindow(
   if (combined.includes("2m") || combined.includes("2000k")) {
     return 2_000_000;
   }
-  if (
-    combined.includes("1m") ||
-    combined.includes("1000k") ||
-    combined.includes("gemini")
-  ) {
+  if (combined.includes("1m") || combined.includes("1000k") || combined.includes("gemini")) {
     return 1_000_000;
   }
   if (combined.includes("grok")) {
@@ -121,25 +108,14 @@ export function deriveEffectiveContextWindowSnapshot(
     provider?: string | null | undefined;
   },
 ): ContextWindowSnapshot {
-  const defaultMax = resolveModelContextWindow(
-    options?.model,
-    options?.provider,
-  );
-  const compactPct = resolveAutoCompactPercentage(
-    options?.model,
-    options?.provider,
-  );
+  const defaultMax = resolveModelContextWindow(options?.model, options?.provider);
+  const compactPct = resolveAutoCompactPercentage(options?.model, options?.provider);
 
   if (snapshot) {
     const maxTokens = snapshot.maxTokens ?? defaultMax;
     const usedPercentage =
-      maxTokens > 0
-        ? Math.min(100, (snapshot.usedTokens / maxTokens) * 100)
-        : 0;
-    const remainingTokens = Math.max(
-      0,
-      Math.round(maxTokens - snapshot.usedTokens),
-    );
+      maxTokens > 0 ? Math.min(100, (snapshot.usedTokens / maxTokens) * 100) : 0;
+    const remainingTokens = Math.max(0, Math.round(maxTokens - snapshot.usedTokens));
     const remainingPercentage = Math.max(0, 100 - usedPercentage);
 
     return {
@@ -148,8 +124,7 @@ export function deriveEffectiveContextWindowSnapshot(
       remainingTokens,
       usedPercentage,
       remainingPercentage,
-      compactsAutomatically:
-        snapshot.compactsAutomatically || compactPct !== null,
+      compactsAutomatically: snapshot.compactsAutomatically || compactPct !== null,
     };
   }
 
@@ -193,15 +168,10 @@ export function deriveLatestContextWindowSnapshot(
 
     const maxTokens = asFiniteNumber(payload?.maxTokens);
     const usedPercentage =
-      maxTokens !== null && maxTokens > 0
-        ? Math.min(100, (usedTokens / maxTokens) * 100)
-        : null;
+      maxTokens !== null && maxTokens > 0 ? Math.min(100, (usedTokens / maxTokens) * 100) : null;
     const remainingTokens =
-      maxTokens !== null
-        ? Math.max(0, Math.round(maxTokens - usedTokens))
-        : null;
-    const remainingPercentage =
-      usedPercentage !== null ? Math.max(0, 100 - usedPercentage) : null;
+      maxTokens !== null ? Math.max(0, Math.round(maxTokens - usedTokens)) : null;
+    const remainingPercentage = usedPercentage !== null ? Math.max(0, 100 - usedPercentage) : null;
 
     return {
       usedTokens,
@@ -218,12 +188,11 @@ export function deriveLatestContextWindowSnapshot(
       lastInputTokens: asFiniteNumber(payload?.lastInputTokens),
       lastCachedInputTokens: asFiniteNumber(payload?.lastCachedInputTokens),
       lastOutputTokens: asFiniteNumber(payload?.lastOutputTokens),
-      lastReasoningOutputTokens: asFiniteNumber(
-        payload?.lastReasoningOutputTokens,
-      ),
+      lastReasoningOutputTokens: asFiniteNumber(payload?.lastReasoningOutputTokens),
       toolUses: asFiniteNumber(payload?.toolUses),
       durationMs: asFiniteNumber(payload?.durationMs),
       compactsAutomatically: asBoolean(payload?.compactsAutomatically) ?? false,
+      autoCompactThreshold: asFiniteNumber(payload?.autoCompactThreshold),
       updatedAt: activity.createdAt,
     };
   }
@@ -231,9 +200,7 @@ export function deriveLatestContextWindowSnapshot(
   return null;
 }
 
-export function formatContextWindowTokens(
-  value: number | null | undefined,
-): string {
+export function formatContextWindowTokens(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "0";
   }

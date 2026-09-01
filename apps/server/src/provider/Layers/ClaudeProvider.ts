@@ -88,12 +88,6 @@ const MINIMUM_CLAUDE_FABLE_5_VERSION = "2.1.169";
 const MINIMUM_CLAUDE_OPUS_4_8_VERSION = "2.1.154";
 const MINIMUM_CLAUDE_OPUS_4_7_VERSION = "2.1.111";
 
-const CURRENT_CLAUDE_MODELS = new Set(["claude-fable-5", "claude-opus-5", "claude-sonnet-5"]);
-
-export function isLegacyClaudeModel(model: string): boolean {
-  return !CURRENT_CLAUDE_MODELS.has(model);
-}
-
 const CLAUDE_MODEL_CATALOG: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "claude-fable-5",
@@ -110,7 +104,11 @@ const CLAUDE_MODEL_CATALOG: ReadonlyArray<ServerProviderModel> = [
             { value: "high", label: "High", isDefault: true },
             { value: "xhigh", label: "Extra High" },
             { value: "max", label: "Max" },
-            { value: "ultracode", label: "Ultracode" },
+            {
+              value: "ultracode",
+              label: "Ultracode",
+              description: "xhigh effort plus multi-agent workflow orchestration",
+            },
             { value: "ultrathink", label: "Ultrathink" },
           ],
           promptInjectedValues: ["ultrathink"],
@@ -141,7 +139,11 @@ const CLAUDE_MODEL_CATALOG: ReadonlyArray<ServerProviderModel> = [
             { value: "high", label: "High", isDefault: true },
             { value: "xhigh", label: "Extra High" },
             { value: "max", label: "Max" },
-            { value: "ultracode", label: "Ultracode" },
+            {
+              value: "ultracode",
+              label: "Ultracode",
+              description: "xhigh effort plus multi-agent workflow orchestration",
+            },
             { value: "ultrathink", label: "Ultrathink" },
           ],
           promptInjectedValues: ["ultrathink"],
@@ -177,7 +179,11 @@ const CLAUDE_MODEL_CATALOG: ReadonlyArray<ServerProviderModel> = [
             { value: "high", label: "High", isDefault: true },
             { value: "xhigh", label: "Extra High" },
             { value: "max", label: "Max" },
-            { value: "ultracode", label: "Ultracode" },
+            {
+              value: "ultracode",
+              label: "Ultracode",
+              description: "xhigh effort plus multi-agent workflow orchestration",
+            },
             { value: "ultrathink", label: "Ultrathink" },
           ],
           promptInjectedValues: ["ultrathink"],
@@ -347,9 +353,9 @@ const CLAUDE_MODEL_CATALOG: ReadonlyArray<ServerProviderModel> = [
   },
 ];
 
-const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = CLAUDE_MODEL_CATALOG.map((model) =>
-  isLegacyClaudeModel(model.slug) ? { ...model, isLegacy: true } : model,
-);
+// Legacy classification happens at the driver boundary via `applyModelManifest`,
+// so the catalog itself carries no `isLegacy` flags.
+const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = CLAUDE_MODEL_CATALOG;
 
 function supportsClaudeOpus5(version: string | null | undefined): boolean {
   return version ? compareSemverVersions(version, MINIMUM_CLAUDE_OPUS_5_VERSION) >= 0 : false;
@@ -626,6 +632,10 @@ export function buildClaudeCapabilitiesProbeQueryOptions(input: {
     pathToClaudeCodeExecutable: input.executablePath,
     abortController: input.abortController,
     settingSources: [...CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES],
+    // The probe keeps filesystem setting sources for slash-command discovery,
+    // but must not run the user's hooks: it fires every few minutes, so
+    // SessionStart hooks would run on every health check.
+    settings: { disableAllHooks: true },
     allowedTools: [],
     // Ignore MCP definitions from every filesystem setting source above. The
     // SDK combines this empty explicit map with --strict-mcp-config.
@@ -636,6 +646,12 @@ export function buildClaudeCapabilitiesProbeQueryOptions(input: {
       // Connected claude.ai MCP servers are discovered outside filesystem
       // config; disable them independently for this health check.
       ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+      // This is a noninteractive health check, so IDE discovery cannot add any
+      // useful capability data. Skipping it also avoids Claude spawning a
+      // Windows `tasklist | findstr` process tree on every periodic refresh.
+      FORCE_CODE_TERMINAL: undefined,
+      CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
+      CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "1",
     },
     ...(input.cwd ? { cwd: input.cwd } : {}),
     stderr: () => {},
@@ -878,7 +894,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         status: "error",
         auth: { status: "unknown" },
         message: isCommandMissingCause(error)
-          ? "Claude Agent CLI (`claude`) is not installed or not on PATH."
+          ? "Claude Agent CLI (`claude`) was not found on PATH."
           : "Failed to execute Claude Agent CLI health check.",
       },
     });
@@ -943,7 +959,13 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     ? yield* resolveCapabilities(claudeSettings).pipe(Effect.orElseSucceed(() => undefined))
     : undefined;
   const skills = yield* discoverClaudeSkills(claudeSettings, cwd, resolvedEnvironment);
-  const slashCommands = capabilities?.slashCommands ?? [];
+  const slashCommands = [
+    {
+      name: "compact",
+      description: "Summarize the conversation and reduce context usage",
+    },
+    ...(capabilities?.slashCommands ?? []),
+  ];
   const dedupedSlashCommands = dedupeSlashCommands(slashCommands);
 
   if (!capabilities) {

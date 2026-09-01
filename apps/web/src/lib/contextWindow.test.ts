@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-  EventId,
-  type OrchestrationThreadActivity,
-  TurnId,
-} from "@t3tools/contracts";
+import { EventId, type OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
 
 import {
   deriveEffectiveContextWindowSnapshot,
@@ -14,11 +10,7 @@ import {
   resolveModelContextWindow,
 } from "./contextWindow";
 
-function makeActivity(
-  id: string,
-  kind: string,
-  payload: unknown,
-): OrchestrationThreadActivity {
+function makeActivity(id: string, kind: string, payload: unknown): OrchestrationThreadActivity {
   return {
     id: EventId.make(id),
     tone: "info",
@@ -41,6 +33,7 @@ describe("contextWindow", () => {
         usedTokens: 14_000,
         maxTokens: 258_000,
         compactsAutomatically: true,
+        autoCompactThreshold: 200_000,
       }),
     ]);
 
@@ -49,6 +42,7 @@ describe("contextWindow", () => {
     expect(snapshot?.totalProcessedTokens).toBeNull();
     expect(snapshot?.maxTokens).toBe(258_000);
     expect(snapshot?.compactsAutomatically).toBe(true);
+    expect(snapshot?.autoCompactThreshold).toBe(200_000);
   });
 
   it("ignores malformed payloads", () => {

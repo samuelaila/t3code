@@ -8,12 +8,10 @@ import {
   resolveAutoCompactPercentage,
 } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
-import {
-  brandIconFromHints,
-  PROVIDER_ICON_BY_PROVIDER,
-} from "./providerIconUtils";
+import { brandIconFromHints, PROVIDER_ICON_BY_PROVIDER } from "./providerIconUtils";
 import { type ProviderDriverKind } from "@t3tools/contracts";
-import { CpuIcon, SparklesIcon, ZapIcon } from "lucide-react";
+import { CpuIcon, Minimize2Icon, SparklesIcon, ZapIcon } from "lucide-react";
+import { Button } from "../ui/button";
 
 function formatPercentage(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -35,11 +33,13 @@ export interface ContextWindowMeterProps {
   model?: string | null | undefined;
   compact?: boolean | undefined;
   className?: string | undefined;
+  modelDisplayName?: string | null | undefined;
+  onCompact?: (() => void) | undefined;
+  compactDisabled?: boolean | undefined;
+  compactDisabledReason?: string | null | undefined;
 }
 
-export const ContextWindowMeter = memo(function ContextWindowMeter(
-  props: ContextWindowMeterProps,
-) {
+export const ContextWindowMeter = memo(function ContextWindowMeter(props: ContextWindowMeterProps) {
   const {
     usage,
     providerDisplayName,
@@ -47,6 +47,10 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
     model,
     compact = false,
     className,
+    modelDisplayName,
+    onCompact,
+    compactDisabled,
+    compactDisabledReason,
   } = props;
 
   const effective = deriveEffectiveContextWindowSnapshot(usage ?? null, {
@@ -57,22 +61,18 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
   const resolvedDisplayName =
     providerDisplayName ||
     formatProviderDisplayName(providerKind) ||
+    modelDisplayName ||
     "Provider";
 
   const BrandIcon =
     brandIconFromHints([model, resolvedDisplayName, providerKind]) ??
-    (providerKind
-      ? PROVIDER_ICON_BY_PROVIDER[providerKind as ProviderDriverKind]
-      : null);
+    (providerKind ? PROVIDER_ICON_BY_PROVIDER[providerKind as ProviderDriverKind] : null);
 
   const autoCompactPercentage = resolveAutoCompactPercentage(
     model ?? undefined,
     providerKind ?? undefined,
   );
-  const normalizedPercentage = Math.max(
-    0,
-    Math.min(100, effective.usedPercentage ?? 0),
-  );
+  const normalizedPercentage = Math.max(0, Math.min(100, effective.usedPercentage ?? 0));
   const isOverloaded = normalizedPercentage > 90;
   const isWarning = normalizedPercentage > 75;
 
@@ -95,8 +95,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
     (effective.cachedInputTokens ?? 0) > 0
       ? Math.round(
           ((effective.cachedInputTokens ?? 0) /
-            ((effective.inputTokens ?? 0) +
-              (effective.cachedInputTokens ?? 0))) *
+            ((effective.inputTokens ?? 0) + (effective.cachedInputTokens ?? 0))) *
             100,
         )
       : null;
@@ -106,7 +105,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
       <PopoverTrigger
         openOnHover
         delay={120}
-        closeDelay={100}
+        closeDelay={onCompact ? 150 : 0}
         render={
           <button
             type="button"
@@ -171,19 +170,12 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
               {BrandIcon ? (
                 <BrandIcon className="size-4 shrink-0" aria-hidden="true" />
               ) : (
-                <CpuIcon
-                  className="size-4 shrink-0 text-muted-foreground"
-                  aria-hidden="true"
-                />
+                <CpuIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               )}
               <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-foreground">
-                  {resolvedDisplayName}
-                </div>
+                <div className="truncate font-medium text-foreground">{resolvedDisplayName}</div>
                 {model ? (
-                  <div className="truncate text-[10px] text-muted-foreground">
-                    {model}
-                  </div>
+                  <div className="truncate text-[10px] text-muted-foreground">{model}</div>
                 ) : null}
               </div>
             </div>
@@ -213,9 +205,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
           {/* Context Window Progress Section */}
           <div className="flex flex-col gap-2 p-3">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="font-medium text-muted-foreground text-xs">
-                Context Window
-              </span>
+              <span className="font-medium text-muted-foreground text-xs">Context Window</span>
               <span className="font-medium tabular-nums text-foreground">
                 {formatContextWindowTokens(effective.usedTokens)}
                 <span className="text-muted-foreground">
@@ -255,8 +245,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
             {/* Remaining tokens */}
             <div className="flex items-center justify-between text-[11px] text-secondary-label">
               <span>
-                {formatContextWindowTokens(effective.remainingTokens ?? null)}{" "}
-                tokens remaining
+                {formatContextWindowTokens(effective.remainingTokens ?? null)} tokens remaining
               </span>
               <span className="tabular-nums font-medium text-muted-foreground">
                 {formatPercentage(effective.remainingPercentage)} free
@@ -280,8 +269,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
                   </div>
                 ) : null}
 
-                {effective.cachedInputTokens != null &&
-                effective.cachedInputTokens > 0 ? (
+                {effective.cachedInputTokens != null && effective.cachedInputTokens > 0 ? (
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <ZapIcon className="size-3 text-amber-500" />
@@ -298,8 +286,7 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
                   </div>
                 ) : null}
 
-                {effective.outputTokens != null &&
-                effective.outputTokens > 0 ? (
+                {effective.outputTokens != null && effective.outputTokens > 0 ? (
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Completion</span>
                     <span className="font-medium tabular-nums text-foreground">
@@ -308,31 +295,23 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
                   </div>
                 ) : null}
 
-                {effective.reasoningOutputTokens != null &&
-                effective.reasoningOutputTokens > 0 ? (
+                {effective.reasoningOutputTokens != null && effective.reasoningOutputTokens > 0 ? (
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1 text-muted-foreground">
                       <SparklesIcon className="size-3 text-purple-500" />
                       Reasoning
                     </span>
                     <span className="font-medium tabular-nums text-foreground">
-                      {formatContextWindowTokens(
-                        effective.reasoningOutputTokens,
-                      )}
+                      {formatContextWindowTokens(effective.reasoningOutputTokens)}
                     </span>
                   </div>
                 ) : null}
 
-                {effective.totalProcessedTokens != null &&
-                effective.totalProcessedTokens > 0 ? (
+                {effective.totalProcessedTokens != null && effective.totalProcessedTokens > 0 ? (
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border/30 pt-1">
-                    <span className="text-muted-foreground">
-                      Total processed
-                    </span>
+                    <span className="text-muted-foreground">Total processed</span>
                     <span className="font-medium tabular-nums text-foreground">
-                      {formatContextWindowTokens(
-                        effective.totalProcessedTokens,
-                      )}
+                      {formatContextWindowTokens(effective.totalProcessedTokens)}
                     </span>
                   </div>
                 ) : null}
@@ -343,9 +322,28 @@ export const ContextWindowMeter = memo(function ContextWindowMeter(
           {/* Footer note for auto-compact or session status */}
           {effective.compactsAutomatically ? (
             <div className="border-t border-border/40 bg-muted/30 px-3 py-2 text-[11px] text-secondary-label">
-              {resolvedDisplayName} automatically compacts context when
-              approaching capacity
+              {resolvedDisplayName} automatically compacts context when approaching capacity
               {autoCompactPercentage ? ` (~${autoCompactPercentage}%)` : ""}.
+            </div>
+          ) : null}
+
+          {onCompact ? (
+            <div className="flex flex-col gap-1 border-t border-border/40 px-3 py-2">
+              <Button
+                size="xs"
+                variant="outline"
+                className="w-full justify-center"
+                disabled={compactDisabled}
+                onClick={onCompact}
+              >
+                <Minimize2Icon aria-hidden="true" />
+                Compact context
+              </Button>
+              {compactDisabled && compactDisabledReason ? (
+                <div className="text-pretty text-secondary-label text-[11px]">
+                  {compactDisabledReason}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
