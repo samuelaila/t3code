@@ -98,10 +98,16 @@ export const makeGrokAcpRuntime = (
     return yield* makeXAiPromptCompletionRuntime(runtime);
   });
 
+/**
+ * T3's built-in Grok slug. It is the CLI's product name, not a model id the ACP accepts,
+ * so selecting it means "use whatever model the Grok session currently runs on".
+ */
+export const GROK_DEFAULT_MODEL_SLUG = "grok-build";
+
 export function resolveGrokAcpBaseModelId(model: string | null | undefined): string {
   const trimmed = model?.trim();
-  const base = trimmed && trimmed.length > 0 ? trimmed : "grok-build";
-  return normalizeModelSlug(base, GROK_DRIVER_KIND) ?? "grok-build";
+  const base = trimmed && trimmed.length > 0 ? trimmed : GROK_DEFAULT_MODEL_SLUG;
+  return normalizeModelSlug(base, GROK_DRIVER_KIND) ?? GROK_DEFAULT_MODEL_SLUG;
 }
 
 const GROK_REASONING_EFFORT_TOKEN = /^[a-z0-9][a-z0-9._-]{0,31}$/i;
@@ -180,14 +186,16 @@ export function applyGrokAcpModelSelection<E>(input: {
   readonly availableModelIds?: ReadonlySet<string> | undefined;
   readonly mapError: (cause: EffectAcpErrors.AcpError) => E;
 }): Effect.Effect<string | undefined, E> {
-  // A thread pinned to a model xAI has since retired must not take the session
-  // down with it — keep whatever model the CLI says the session is already on,
-  // and still honour any reasoning change that came with the request.
+  // The product slug is never sent over the wire; it keeps the session's current model.
+  // A thread pinned to a model xAI has since retired must not take the session down
+  // with it either — keep whatever model the CLI says the session is already on, and
+  // still honour any reasoning change that came with the request.
   const requestedModelId =
-    input.requestedModelId !== undefined &&
-    input.availableModelIds !== undefined &&
-    input.availableModelIds.size > 0 &&
-    !input.availableModelIds.has(input.requestedModelId)
+    input.requestedModelId === GROK_DEFAULT_MODEL_SLUG ||
+    (input.requestedModelId !== undefined &&
+      input.availableModelIds !== undefined &&
+      input.availableModelIds.size > 0 &&
+      !input.availableModelIds.has(input.requestedModelId))
       ? undefined
       : input.requestedModelId;
   const modelChanged = requestedModelId !== undefined && requestedModelId !== input.currentModelId;
