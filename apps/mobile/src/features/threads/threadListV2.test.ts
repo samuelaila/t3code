@@ -258,32 +258,13 @@ describe("resolveThreadListV2SnoozeGateExpiryMs", () => {
 });
 
 describe("sortThreadsForListV2", () => {
-  it("puts attention above working and keeps working in creation order", () => {
+  it("orders by creation time, newest first, ignoring activity", () => {
     const sorted = sortThreadsForListV2([
-      {
-        id: "working-recent-update",
-        createdAt: "2026-06-01T08:00:00.000Z",
-        updatedAt: "2026-06-01T14:00:00.000Z",
-        session: { status: "running", updatedAt: "2026-06-01T14:00:00.000Z" },
-      },
-      {
-        id: "working-newer-created",
-        createdAt: "2026-06-01T12:00:00.000Z",
-        updatedAt: "2026-06-01T12:05:00.000Z",
-        session: { status: "running", updatedAt: "2026-06-01T12:05:00.000Z" },
-      },
-      {
-        id: "needs-approval",
-        createdAt: "2026-06-01T07:00:00.000Z",
-        hasPendingApprovals: true,
-        latestUserMessageAt: "2026-06-01T13:00:00.000Z",
-      },
-    ] as Parameters<typeof sortThreadsForListV2>[0]);
-    expect(sorted.map((thread) => thread.id)).toEqual([
-      "needs-approval",
-      "working-newer-created",
-      "working-recent-update",
+      { id: "oldest", createdAt: "2026-06-01T08:00:00.000Z" },
+      { id: "newest", createdAt: "2026-06-01T12:00:00.000Z" },
+      { id: "middle", createdAt: "2026-06-01T10:00:00.000Z" },
     ]);
+    expect(sorted.map((thread) => thread.id)).toEqual(["newest", "middle", "oldest"]);
   });
 
   it("surfaces an un-settled thread at the top via its re-entry stamp", () => {
@@ -637,7 +618,7 @@ describe("buildThreadListV2Items", () => {
     expect(layout.settledShelfHeaderIndex).toBe(0);
   });
 
-  it("keeps non-attention cards in creation order despite recent updates", () => {
+  it("keeps cards in creation order while settled sorts by recency", () => {
     const { items } = buildThreadListV2Items({
       threads: [
         makeThread({
@@ -650,7 +631,6 @@ describe("buildThreadListV2Items", () => {
           id: ThreadId.make("newer-created"),
           title: "Newer",
           createdAt: "2026-06-01T12:00:00.000Z",
-          updatedAt: "2026-06-01T12:00:00.000Z",
         }),
       ],
       environmentId: null,
@@ -659,6 +639,32 @@ describe("buildThreadListV2Items", () => {
     });
 
     expect(items.map((item) => item.thread.id)).toEqual(["newer-created", "older-created"]);
+  });
+
+  it("sorts settled threads by their persisted settlement timestamp", () => {
+    const { items } = buildThreadListV2Items({
+      threads: [
+        makeThread({
+          id: ThreadId.make("settled-newer"),
+          title: "Settled newer",
+          settledOverride: "settled",
+          settledAt: "2026-06-01T12:00:00.000Z",
+          latestUserMessageAt: "2026-06-01T08:00:00.000Z",
+        }),
+        makeThread({
+          id: ThreadId.make("settled-older"),
+          title: "Settled older",
+          settledOverride: "settled",
+          settledAt: "2026-06-01T10:00:00.000Z",
+          latestUserMessageAt: "2026-06-01T09:00:00.000Z",
+        }),
+      ],
+      environmentId: null,
+      searchQuery: "",
+      now: NOW,
+    });
+
+    expect(items.map((item) => item.thread.id)).toEqual(["settled-newer", "settled-older"]);
   });
 
   it("keeps settled threads in the tail and filters by search query", () => {
@@ -758,7 +764,7 @@ describe("buildThreadListV2Items settled paging", () => {
           id: ThreadId.make(`settled-${index}`),
           title: `Settled ${index}`,
           settledOverride: "settled",
-          settledAt: NOW,
+          settledAt: `2026-06-01T0${index}:10:00.000Z`,
           latestUserMessageAt: `2026-06-01T0${index}:00:00.000Z`,
           // A turn adopted the message (same requestedAt): without it the
           // thread reads as a queued turn start, which never settles.

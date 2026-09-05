@@ -8,7 +8,11 @@ import {
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
-import { sortPinnedThreadsByOrderKey } from "@t3tools/client-runtime/state/thread-sort";
+import {
+  activeThreadAnchorTimestampMs,
+  resolveSettledThreadTimestamp,
+  sortPinnedThreadsByOrderKey,
+} from "@t3tools/client-runtime/state/thread-sort";
 import type { EnvironmentId, ProjectId } from "@t3tools/contracts";
 
 import type { PendingNewTask } from "../../state/use-pending-new-tasks";
@@ -146,112 +150,28 @@ function parseTimestampMs(isoDate: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-/** First VALID timestamp wins: a present-yet-malformed string falls through
-    to the next candidate rather than sinking the row to the epoch. */
-function firstValidTimestampMs(...candidates: ReadonlyArray<string | null | undefined>): number {
-  for (const candidate of candidates) {
-    if (candidate == null) continue;
-    const parsed = Date.parse(candidate);
-    if (!Number.isNaN(parsed)) return parsed;
-  }
-  return 0;
-}
-
-type ActiveThreadActivityInput = {
-  readonly createdAt: string;
-  readonly updatedAt?: string | null;
-  readonly latestUserMessageAt?: string | null;
-  readonly latestTurn?: {
-    readonly requestedAt?: string | null;
-    readonly startedAt?: string | null;
-    readonly completedAt?: string | null;
-  } | null;
-  readonly hasPendingApprovals?: boolean;
-  readonly hasPendingUserInput?: boolean;
-  readonly session?: EnvironmentThreadShell["session"];
-  /**
-   * When a settled thread came back to life. Anchoring to it keeps the row
-   * near the top of its band instead of sinking to creation order.
-   */
-  readonly unsettledAt?: string | null | undefined;
-};
-
-type ActiveThreadSortTier = "attention" | "rest";
-
-const ACTIVE_THREAD_SORT_TIER_RANK: Record<ActiveThreadSortTier, number> = {
-  attention: 0,
-  rest: 1,
-};
-
 /**
- * Attention (approval / input / failed) first; everything else stays in a
- * stable creation order so Working timers do not reshuffle the list.
- * Mirrors web active-list bands (mobile has no local visit stamp for Done).
+ * v2 sort: static order, newest anchor on top. Activity NEVER reorders the
+ * list — a row holds its position between lifecycle transitions. The anchor
+ * is creation time until an un-settle re-anchors it (see
+ * activeThreadAnchorTimestampMs), so an un-settled thread surfaces at the
+ * top instead of sinking back to its creation-order slot. Mirrors web's
+ * sortThreadsForSidebar.
  */
-export function resolveActiveThreadSortTier(
-  thread: ActiveThreadActivityInput,
-): ActiveThreadSortTier {
-  const status = resolveThreadListV2Status({
-    hasPendingApprovals: thread.hasPendingApprovals ?? false,
-    hasPendingUserInput: thread.hasPendingUserInput ?? false,
-    session: thread.session ?? null,
-  });
-  if (status === "approval" || status === "input" || status === "failed") {
-    return "attention";
-  }
-  return "rest";
-}
-
-/** Recency for attention rows only — ignores turn start / updatedAt churn. */
-export function resolveActiveThreadAttentionRecencyMs(thread: ActiveThreadActivityInput): number {
-  let latestMs = Number.NEGATIVE_INFINITY;
-  for (const candidate of [
-    thread.latestTurn?.completedAt,
-    thread.latestUserMessageAt,
-    thread.latestTurn?.requestedAt,
-    thread.unsettledAt,
-    thread.createdAt,
-  ]) {
-    if (candidate == null) continue;
-    const parsed = Date.parse(candidate);
-    if (!Number.isNaN(parsed) && parsed > latestMs) {
-      latestMs = parsed;
-    }
-  }
-  return latestMs === Number.NEGATIVE_INFINITY ? parseTimestampMs(thread.createdAt) : latestMs;
-}
-
-/** Creation order, unless the thread came back — then its re-entry stamp wins. */
-function resolveRestAnchorMs(thread: ActiveThreadActivityInput): number {
-  const created = parseTimestampMs(thread.createdAt);
-  if (thread.unsettledAt == null) return created;
-  const unsettled = Date.parse(thread.unsettledAt);
-  return Number.isNaN(unsettled) ? created : Math.max(created, unsettled);
-}
-
-export function sortThreadsForListV2<T extends { readonly id: string } & ActiveThreadActivityInput>(
-  threads: readonly T[],
-): T[] {
+export function sortThreadsForListV2<
+  T extends {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly unsettledAt?: string | null | undefined;
+  },
+>(threads: readonly T[]): T[] {
   // .sort() on a copy, not .toSorted(): Hermes doesn't ship the ES2023
   // change-by-copy array methods.
-  return [...threads].sort((left, right) => {
-    const leftTier = resolveActiveThreadSortTier(left);
-    const rightTier = resolveActiveThreadSortTier(right);
-    const tierDiff =
-      ACTIVE_THREAD_SORT_TIER_RANK[leftTier] - ACTIVE_THREAD_SORT_TIER_RANK[rightTier];
-    if (tierDiff !== 0) return tierDiff;
-
-    if (leftTier === "rest") {
-      return (
-        resolveRestAnchorMs(right) - resolveRestAnchorMs(left) || left.id.localeCompare(right.id)
-      );
-    }
-
-    return (
-      resolveActiveThreadAttentionRecencyMs(right) - resolveActiveThreadAttentionRecencyMs(left) ||
-      left.id.localeCompare(right.id)
-    );
-  });
+  return [...threads].sort(
+    (left, right) =>
+      activeThreadAnchorTimestampMs(right) - activeThreadAnchorTimestampMs(left) ||
+      left.id.localeCompare(right.id),
+  );
 }
 
 export interface ThreadListV2Item {
@@ -335,25 +255,21 @@ export function buildThreadListV2ListItems(input: {
   readonly settledShelfHeaderIndex?: number | null;
   readonly snoozeLabelNow?: string;
 }): ThreadListV2ListItem[] {
-  const threadItems = input.items.map(
-    (item): ThreadListV2ListItem => ({
-      type: "v2-thread",
-      key: `v2-thread:${item.thread.environmentId}:${item.thread.id}`,
-      item,
-      snoozeWakeLabelText:
-        item.snoozed && item.thread.snoozedUntil != null && input.snoozeLabelNow !== undefined
-          ? snoozeWakeLabel(item.thread.snoozedUntil, { now: input.snoozeLabelNow })
-          : undefined,
-    }),
-  );
-  const pendingItems = input.pendingTasks.map(
-    (pendingTask, index): ThreadListV2ListItem => ({
-      type: "v2-pending",
-      key: `v2-pending:${pendingTask.message.messageId}`,
-      pendingTask,
-      showPendingDivider: index === 0,
-    }),
-  );
+  const threadItems = input.items.map((item): ThreadListV2ListItem => ({
+    type: "v2-thread",
+    key: `v2-thread:${item.thread.environmentId}:${item.thread.id}`,
+    item,
+    snoozeWakeLabelText:
+      item.snoozed && item.thread.snoozedUntil != null && input.snoozeLabelNow !== undefined
+        ? snoozeWakeLabel(item.thread.snoozedUntil, { now: input.snoozeLabelNow })
+        : undefined,
+  }));
+  const pendingItems = input.pendingTasks.map((pendingTask, index): ThreadListV2ListItem => ({
+    type: "v2-pending",
+    key: `v2-pending:${pendingTask.message.messageId}`,
+    pendingTask,
+    showPendingDivider: index === 0,
+  }));
   const snoozedCount = input.snoozedCount ?? 0;
   const snoozedShelfHeaderIndex = input.snoozedShelfHeaderIndex ?? null;
   const settledCount = input.settledCount ?? 0;
@@ -480,8 +396,8 @@ export function buildThreadListV2Items(input: {
         );
   const orderedSettled = [...settled].sort(
     (left, right) =>
-      firstValidTimestampMs(right.latestUserMessageAt, right.updatedAt) -
-      firstValidTimestampMs(left.latestUserMessageAt, left.updatedAt),
+      parseTimestampMs(resolveSettledThreadTimestamp(right) ?? "") -
+      parseTimestampMs(resolveSettledThreadTimestamp(left) ?? ""),
   );
   const settledLimit = input.settledLimit ?? Number.POSITIVE_INFINITY;
   const pagedSettled =
